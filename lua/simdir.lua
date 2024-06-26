@@ -1,6 +1,8 @@
--- local scan = require("plenary.scandir")
--- local d = scan.scan_dir('.', {hidden=true, depth=2})
--- print(vim.inspect(d))
+-- TODO:
+-- 1. handle permission denied
+-- 2. when go to "..", move cursor on the directory that just leave
+-- 3. add highlight to first "."
+-- 4. clean up highlight.lua
 
 local M = {}
 
@@ -21,9 +23,65 @@ M.PADDING_LINE_COUNT = 3
 
 M.info_table = {}
 
+M.open_dir_test = function(path)
+    local lines
+    local cmd = string.format("ls %s -alh", path)
+    local job_id = vim.fn.jobstart(
+        cmd,
+        {
+            stdout_buffered = true,
+            stderr_buffered = true,
+            on_stdout = function(_, data, _)
+                if not data then return
+                else lines = data end
+            end,
+            on_stderr = function(_, data, _)
+                for _, line in ipairs(data) do
+                    print(line)
+                end
+            end,
+            on_exit = function(_, code, _)
+                print("exit with code:", code)
+                -- print(vim.inspect(M.info_table))
+            end
+        }
+    )
+    vim.fn.jobwait({job_id})
+
+    print('Path: ' .. path)
+
+    M.info_table = {}
+
+    local buf = bf.buf_open()
+
+    -- Clear the buffer content
+    bf.write_lines(buf, 0, -1, {})
+    -- Write path message
+    bf.write_lines(buf, 0, -1, {path .. ':'})
+
+    for i, line in ipairs(lines) do
+        if line ~= '' then
+            -- Write lines to buffer
+            bf.write_lines(buf, -1, -1, {line})
+            -- print(line)
+            local tbl = fs.parse_line_2(line, path)
+            table.insert(M.info_table, tbl)
+            -- print(vim.inspect(tbl))
+            if tbl.ftype == 'd' then
+                hl.apply_highlight(buf, 'Simdir_hl_dirname', i, tbl.hl_start, tbl.hl_end)
+            elseif tbl.ftype == 'l' then
+                hl.apply_highlight(buf, 'Simdir_hl_symlink', i, tbl.hl_start, tbl.hl_end)
+                if tbl.misc.link_to == 'd' then
+                    hl.apply_highlight(buf, 'Simdir_hl_dirname', i, tbl.misc.link_to_hl_start, tbl.misc.link_to_hl_end)
+                end
+            end
+        end
+    end
+
+end
+
 -- @param: path: string
--- @param: display_path: [string | nil]
-M.open_dir = function(path, display_path)
+M.open_dir = function(path)
     print('Path: ' .. path)
 
     M.info_table = {}
@@ -34,11 +92,7 @@ M.open_dir = function(path, display_path)
     bf.write_lines(buf, 0, -1, {})
 
     -- Write path message
-    if display_path then
-        bf.write_lines(buf, 0, -1, {display_path .. ':'})
-    else
-        bf.write_lines(buf, 0, -1, {path .. ':'})
-    end
+    bf.write_lines(buf, 0, -1, {path .. ':'})
 
     local line_count = 0
     local start_col_of_filename = nil
@@ -64,24 +118,16 @@ M.open_dir = function(path, display_path)
                     local tbl = fs.parse_line(line, start_col_of_filename, path)
                     table.insert(M.info_table, tbl)
 
-                    -- hl.highlight_logic(buf, tbl, line_count, start_col_of_filename, string.len(line))
                     if tbl.type == 'd' then
                         hl.apply_highlight(buf, 'Simdir_hl_dirname', line_count, start_col_of_filename-1, string.len(line))
-                        print('start_col_of_filename:', start_col_of_filename)
-                        print('#line:', string.len(line))
                     elseif tbl.type == 'l' then
-                        print('link hl')
                         local s = tbl.misc.s
                         local e = tbl.misc.e
-                        hl.apply_highlight(buf, 'Simdir_hl_link', line_count, start_col_of_filename-1, start_col_of_filename+s-2)
-                        print('start_col_of_filename:', start_col_of_filename)
-                        print('s:', s)
+                        hl.apply_highlight(buf, 'Simdir_hl_symlink', line_count, start_col_of_filename-1, start_col_of_filename+s-2)
                         if tbl.misc.link_info == 'd' then
-                            print('dir hl')
                             hl.apply_highlight(buf, 'Simdir_hl_dirname', line_count, start_col_of_filename+e-1, string.len(line))
                         end
                     end
-
                 end
             end
         end
@@ -92,10 +138,14 @@ M.open_dir = function(path, display_path)
     vim.fn.jobstart(
         cmd,
         {
-            -- stdout_buffered = false,
-            -- stderr_buffered = false,
+            stdout_buffered = true,
+            stderr_buffered = true,
             on_stdout = on_output,
-            on_stderr = on_output,
+            on_stderr = function(_, data, _)
+                for _, line in ipairs(data) do
+                    print(line)
+                end
+            end,
             on_exit = function(_, code, _)
                 print("exit with code:", code)
                 -- print(vim.inspect(M.info_table))
@@ -120,7 +170,7 @@ M.open_file = function(new_win)
         if info.type == 'd' then
             if new_win then
             end
-            print("go in to:" .. info.real_path)
+            -- print("go in to:" .. info.real_path)
             M.open_dir(info.real_path)
         elseif info.type == 'l' then
             if info.misc.link_info == '-' then
@@ -129,8 +179,8 @@ M.open_file = function(new_win)
                 end
                 vim.cmd('edit ' .. info.real_path)
             else
-                print("go in to:" .. info.real_path)
-                M.open_dir(info.real_path, info.display_path)
+                -- print("go in to:" .. info.real_path)
+                M.open_dir(info.real_path)
             end
         else
             local file_path = info.real_path
@@ -143,11 +193,44 @@ M.open_file = function(new_win)
     end
 end
 
+M.open_file_2 = function()
+    local line_nr = vim.api.nvim_win_get_cursor(bf.win)[1]
+    line_nr = line_nr - 1
+    if line_nr > 0 then
+        local info = M.info_table[line_nr]
+
+        if info.ftype == 'd' then
+            if new_win then
+            end
+            -- print("go in to:" .. info.real_path)
+            M.open_dir_test(info.full_path)
+        elseif info.ftype == 'l' then
+            if info.misc.link_to == '-' then
+                -- if new_win then
+                --     vim.cmd('rightbelow split')
+                -- end
+                vim.cmd('edit ' .. info.full_path)
+            else
+                -- print("go in to:" .. info.real_path)
+                M.open_dir_test(info.full_path)
+            end
+        else
+            print(info.full_path)
+            -- if new_win then
+            --     vim.cmd('rightbelow split')
+            -- end
+            vim.cmd('edit ' .. info.full_path)
+        end
+    end
+end
+
 
 
 M.determine = function(opts)
     if opts.args == M.commands[1] then
         M.open_parent_dir()
+    else
+        M.open_dir_test(uv.cwd())
     end
 end
 
