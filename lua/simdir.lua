@@ -10,6 +10,7 @@ local uv = vim.uv
 local fs = require('simdir.fs')
 local bf = require('simdir.buffer')
 local hl = require('simdir.highlight')
+local op = require('simdir.operations')
 
 
 M.default_config = {}
@@ -19,10 +20,9 @@ M.commands = {
     "open_dir",  -- Open specified directory
 }
 
-M.PADDING_LINE_COUNT = 3
-
 M.info_table = {}
 
+M.PADDING_LINE_COUNT = 2
 
 -- @param: path: string
 M.open_dir = function(path)
@@ -39,7 +39,9 @@ M.open_dir = function(path)
             end,
             on_stderr = function(_, data, _)
                 for _, line in ipairs(data) do
-                    vim.schedule(function() vim.notify(line, vim.log.levels.ERROR) end)
+                    if line ~= '' then
+                        vim.schedule(function() vim.notify(line, vim.log.levels.ERROR) end)
+                    end
                 end
             end,
             on_exit = function(_, code, _)
@@ -54,7 +56,6 @@ M.open_dir = function(path)
     if exit_code[1] ~= 0 then return end
 
     -- print('Path: ' .. path)
-
     M.info_table = {}
 
     local buf = bf.buf_open()
@@ -63,6 +64,7 @@ M.open_dir = function(path)
     bf.write_lines(buf, 0, -1, {})
     -- Write path message
     bf.write_lines(buf, 0, -1, {path .. ':'})
+    -- Highlight the path text
     hl.apply_highlight(buf, 'DiagnosticOk', 0, 0, #path)
 
     for i, line in ipairs(lines) do
@@ -71,19 +73,21 @@ M.open_dir = function(path)
             bf.write_lines(buf, -1, -1, {line})
             -- print(line)
             local tbl = fs.parse_line(line, path)
-            table.insert(M.info_table, tbl)
-            -- print(vim.inspect(tbl))
-            if tbl.ftype == 'd' then
-                hl.apply_highlight(buf, 'Simdir_hl_dirname', i, tbl.hl_start, tbl.hl_end)
-            elseif tbl.ftype == 'l' then
-                hl.apply_highlight(buf, 'Simdir_hl_symlink', i, tbl.hl_start, tbl.hl_end)
-                if tbl.misc.link_to == 'd' then
-                    hl.apply_highlight(buf, 'Simdir_hl_dirname', i, tbl.misc.link_to_hl_start, tbl.misc.link_to_hl_end)
+            if tbl ~= nil then
+                table.insert(M.info_table, tbl)
+                -- print(vim.inspect(tbl))
+                if tbl.ftype == 'd' then
+                    hl.apply_highlight(buf, 'Simdir_hl_dirname', i, tbl.hl_start, tbl.hl_end)
+                elseif tbl.ftype == 'l' then
+                    hl.apply_highlight(buf, 'Simdir_hl_symlink', i, tbl.hl_start, tbl.hl_end)
+                    if tbl.misc.link_to == 'd' then
+                        hl.apply_highlight(buf, 'Simdir_hl_dirname', i, tbl.misc.link_to_hl_start, tbl.misc.link_to_hl_end)
+                    end
                 end
             end
         end
     end
-    bf.cursor_hijack(M.info_table[2].filename_start)
+    bf.cursor_hijack(M.info_table[1].filename_start)
 end
 
 M.open_parent_dir = function()
@@ -95,38 +99,113 @@ end
 
 M.open_file = function()
     local line_nr = vim.api.nvim_win_get_cursor(bf.win)[1]
-    line_nr = line_nr - 1
-    if line_nr > 0 then
-        local info = M.info_table[line_nr]
+    line_nr = line_nr - M.PADDING_LINE_COUNT
+    if line_nr <= 0 then return end
 
-        if info.ftype == 'd' then
-            if new_win then
-            end
-            -- print("go in to:" .. info.real_path)
-            local last_path = M.info_table[2].full_path
-            M.open_dir(info.full_path)
-            if info.fname == ".." then
-                bf.move_cursor(last_path, M.info_table)
-            end
-        elseif info.ftype == 'l' then
-            if info.misc.link_to == '-' then
-                -- if new_win then
-                --     vim.cmd('rightbelow split')
-                -- end
-                vim.cmd('edit ' .. info.full_path)
-            else
-                -- print("go in to:" .. info.real_path)
-                M.open_dir(info.full_path)
-            end
-        else
-            print(info.full_path)
-            -- if new_win then
-            --     vim.cmd('rightbelow split')
-            -- end
-            vim.cmd('edit ' .. info.full_path)
+    local info = M.info_table[line_nr]
+    if info.ftype == 'd' then
+        local last_path = M.info_table[1].full_path
+        M.open_dir(info.full_path)
+        -- Move cursor to the directory that just exited
+        if info.fname == ".." then
+            bf.move_cursor_on_last_directory(last_path, M.info_table, M.PADDING_LINE_COUNT)
         end
+    elseif info.ftype == 'l' then
+        if info.misc.link_to == '-' then
+            vim.cmd('edit ' .. info.full_path)
+        elseif info.misc.link_to == "broken" then
+            vim.notify("Link is broken", vim.log.levels.WARN)
+        else
+            M.open_dir(info.full_path)
+        end
+    else
+        print(info.full_path)
+        -- if new_win then
+        --     vim.cmd('rightbelow split')
+        -- end
+        vim.cmd('edit ' .. info.full_path)
     end
 end
+
+-- @key : string
+M.key_operate = function(key)
+    local line_nr = vim.api.nvim_win_get_cursor(bf.win)[1] - M.PADDING_LINE_COUNT
+    if line_nr <= 0 then return end
+
+    local info = M.info_table[line_nr]
+    local path = M.info_table[1].full_path
+
+    -- open file or directory, (don't know why "<CR>" string doesn't work)
+    if key == 'o' or key == "CR" then
+        M.open_file()
+
+        -- touch command, for creating empty file
+    elseif key == 'T' then
+        op.touch(path)
+
+        -- mkdir command
+    elseif key == '+' then
+        op.mkdir(path)
+
+        -- rename
+    elseif key == 'R' then
+        if info.ftype == 'l' then
+            op.rename(info.misc.fname_with_link_from, info.fname)
+        else
+            op.rename(info.full_path, info.fname)
+        end
+
+        -- move
+    elseif key == 'M' then
+        op.move(path)
+        -- vim.notify("TODO: M for move, allow mark", vim.log.levels.WARN)
+
+        -- set mark
+    elseif key == 'm' then
+        vim.api.nvim_buf_set_keymap(bf.buf, 'n', 'm', ":echo 'TODO'<CR>", {silent=true, noremap=true, desc=""})
+
+        -- set d mark
+    elseif key == 'd' then
+        vim.notify("TODO: d for d mark", vim.log.levels.WARN)
+
+        -- unmark
+    elseif key == 'u' then
+        vim.notify("TODO: r for reload", vim.log.levels.WARN)
+
+        -- unmark all
+    elseif key == 'U' then
+        vim.notify("TODO: U for unmark all", vim.log.levels.WARN)
+
+        -- invert marks
+    elseif key == 'i' then
+        vim.notify("TODO: i for invert marks", vim.log.levels.WARN)
+
+        -- do delete on d mark files
+    elseif key == 'x' then
+        vim.notify("TODO: x for delete on d mark files", vim.log.levels.WARN)
+
+        -- reload
+    elseif key == 'r' then
+        M.open_dir(M.info_table[1].full_path)
+        -- vim.notify("TODO: r for reload", vim.log.levels.WARN)
+        -- vim.api.nvim_buf_set_keymap(bf.buf, 'n', 'r', ":echo 'TODO'<CR>", {silent=true, noremap=true, desc=""})
+
+        -- shell command
+    elseif key == "s!" then
+        fs.shell_command(M.info_table[1].full_path)
+
+    end
+
+    if key ~= 'r' then M.open_dir(M.info_table[1].full_path) end
+    -- TODO: maybe add a "You might need to reload" in the open_dir function, because if the buffer is not update
+    -- the ls command will throw error
+end
+
+
+
+
+
+
 
 
 
@@ -149,7 +228,7 @@ M.determine = function(opts)
                 local stat = uv.fs_stat(pto)
                 if not stat then
                     vim.cmd([[echon ' ']])
-                    vim.notify("No such directory: " .. pto, vim.log.levels.ERROR)
+                    vim.notify("No such directory: " .. pto, vim.log.levels.WARN)
                 else
                     if stat.type == "file" then
                         pto = fs.trim_last(pto)
@@ -172,6 +251,7 @@ M.setup = function(user_opts)
 
     -- Create an autocommand group
     vim.api.nvim_create_augroup('SimdirCursorHijack', { clear = true })
+
 
     vim.api.nvim_create_user_command(
         'Simdir',

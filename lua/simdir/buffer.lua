@@ -61,13 +61,6 @@ M.create_buf = function()
     vim.api.nvim_buf_set_option(buf, 'swapfile', false)
     vim.api.nvim_buf_set_option(buf, 'buflisted', true)
 
-    -- Pressing r to reload
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'r', ":", {silent=true, noremap=true, desc=""})
-    -- Jump to file when hit enter
-    vim.api.nvim_buf_set_keymap(buf, 'n', "<CR>", ":lua require('simdir').open_file()<CR>", {silent=true, noremap=true, desc="Simdir open file"})
-    -- Open in new window
-    vim.api.nvim_buf_set_keymap(buf, 'n', "o", ":lua require('simdir').open_file()<CR>", {silent=true, noremap=true, desc="Simdir open file in new window"})
-
     M.buf.main = buf
     return buf
 end
@@ -90,8 +83,11 @@ M.buf_open = function()
         M.win = win
     end
 
+    M.buf_set_keymaps(buf)
+
     return buf
 end
+
 
 M.write_lines = function(buf, s, e, lines)
     vim.api.nvim_buf_set_option(buf, 'modifiable', true)
@@ -99,13 +95,13 @@ M.write_lines = function(buf, s, e, lines)
     vim.api.nvim_buf_set_option(buf, 'modifiable', false)
 end
 
-M.move_cursor = function(last_path, info_table)
+M.move_cursor_on_last_directory = function(last_path, info_table, padding)
     local fname = vim.fn.fnamemodify(last_path, ":t")
     if fname == '' then return end
     for i, data in ipairs(info_table) do
         if data.fname == fname then
-            vim.api.nvim_win_set_cursor(M.win, {i+1, data.filename_start-1})
-            break
+            vim.api.nvim_win_set_cursor(M.win, {i+padding, data.filename_start-1})
+            return
         end
     end
 end
@@ -130,6 +126,9 @@ M.cursor_hijack = function(filename_start)
         last_time_row = row
     end
 
+    -- Set the cursor position first
+    vim.api.nvim_win_set_cursor(0, {3, filename_start-1})
+
     -- Set up autocommands to call the function on cursor movement in normal mode
     vim.api.nvim_create_autocmd('CursorMoved', {
         group = 'SimdirCursorHijack',
@@ -138,5 +137,42 @@ M.cursor_hijack = function(filename_start)
     })
 end
 
+
+M.buf_set_keymaps = function(buf)
+    local function h(key)
+        return string.format(":lua require('simdir').key_operate('%s')<CR>", key)
+    end
+    -- Jump to file when hit enter
+    vim.api.nvim_buf_set_keymap(buf, 'n', "<CR>", h("CR"), {silent=true, noremap=true, desc="Simdir open file"})
+    -- Open in new window, (Not yet implement)
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'o', h('o'), {silent=true, noremap=true, desc="Simdir open file in new window"})
+    -- T to touch file
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'T', h('T'), {silent=true, noremap=true, desc="Simdir touch file"})
+    -- + for create a directory
+    vim.api.nvim_buf_set_keymap(buf, 'n', '+', h('+'), {silent=true, noremap=true, desc="Simdir mkdir"})
+    -- R to rename
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'R', h('R'), {silent=true, noremap=true, desc="Simdir rename file/dir"})
+    -- M for move
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'M', h('M'), {silent=true, noremap=true, desc="Simdir move file/dir"})
+    -- Set mark to a line
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'm', h('m'), {silent=true, noremap=true, desc="Simdir set mark"})
+    -- Set d mark to a line
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'd', h('d'), {silent=true, noremap=true, desc="Simdir set d mark"})
+    -- Unmark to a line
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'u', h('u'), {silent=true, noremap=true, desc="Simdir set d mark"})
+    -- Unmark all
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'U', h('U'), {silent=true, noremap=true, desc="Simdir set d mark"})
+    -- Invert marks
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'i', h('i'), {silent=true, noremap=true, desc="Simdir set d mark"})
+    -- Delete the d marks files/dirs
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'x', h('x'), {silent=true, noremap=true, desc="Simdir set d mark"})
+    -- Pressing r to reload
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'r', h('r'), {silent=true, noremap=true, desc="Simdir reload"})
+    -- Run shell command
+    vim.api.nvim_buf_set_keymap(buf, 'n', "s!", h("s!"), {silent=true, noremap=true, desc="Simdir run shell command"})
+
+    -- Ctrl+c to kill command
+    vim.api.nvim_buf_set_keymap(buf, 'n', "<C-c>", ":lua require('simdir.operations').interrupt_program()<CR>", {silent=true, noremap=true, desc="Simdir interrupt command"})
+end
 
 return M

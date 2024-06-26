@@ -17,11 +17,6 @@ M.init_hl_group = function()
     local val = M.default_hl_val
     local ns_id = vim.api.nvim_create_namespace('Simdir_ns')
     M.ns_id = ns_id
-    -- vim.api.nvim_set_hl(ns_id, 'Simdir_hl_dirname', val.dirname)
-    -- vim.api.nvim_set_hl(ns_id, 'Simdir_hl_symlink', val.symlink)
-
-    -- Active the highlight namespace
-    -- vim.api.nvim_set_hl_ns(ns_id)
 
     local hl_group = "def link Simdir_hl_dirname qfFileName"
     vim.cmd.highlight(hl_group)

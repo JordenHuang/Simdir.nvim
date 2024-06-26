@@ -3,6 +3,15 @@ local M = {}
 local uv = vim.loop
 
 
+M.is_file_exist = function(path)
+    local state = vim.uv.fs_stat(path)
+    if state == nil then return false
+    else
+        if state.type == "file" then return true end
+        return false
+    end
+end
+
 -- Function to get file attributes
 M.get_file_attributes = function(path)
     local stat = uv.fs_stat(path)
@@ -18,11 +27,12 @@ M.resolve_symlink_fname = function(fname)
 end
 
 -- Function to resolve symlink
-M.resolve_symlink = function(path)
-    local real_path = vim.uv.fs_realpath(path)
+M.resolve_symlink = function(path_to_resolve)
+    local real_path = vim.uv.fs_realpath(path_to_resolve)
     return real_path
 end
 
+-- trim last component (the opposite is `get_basename`)
 M.trim_last = function(path)
     -- Remove trailing slash if present
     if path:sub(-1) == '/' then
@@ -53,6 +63,7 @@ M.get_start_col_of_filename = function(line)
     return start_col_of_filename
 end
 
+M.get_filename = function(path) return M.normalize_path(vim.fn.fnamemodify(path, ':t')) end
 
 -- Stolen from mini.files
 -- https://github.com/echasnovski/mini.files/blob/main/lua/mini/files.lua#L2333-L2366
@@ -63,6 +74,14 @@ M.is_present_path = function(path) return vim.uv.fs_stat(path) ~= nil end
 M.child_path = function(dir, name) return M.normalize_path(string.format('%s/%s', dir, name)) end
 
 M.full_path = function(path) return M.normalize_path(vim.fn.fnamemodify(path, ':p')) end
+
+M.shorten_path = function(path)
+    -- Replace home directory with '~'
+    path = M.normalize_path(path)
+    local home_dir = M.normalize_path(vim.loop.os_homedir() or '~')
+    local res = path:gsub('^' .. vim.pesc(home_dir), '~')
+    return res
+end
 
 M.get_basename = function(path) return M.normalize_path(path):match('[^/]+$') end
 
@@ -100,7 +119,7 @@ M.parse_line = function(line, path)
     if vim.startswith(line, "total") then
         -- Reset the index of the start of a file name
         M.filename_start = -1
-        return {}
+        return nil --{ path = path }
     elseif string.sub(line, -1) == '.' and M.filename_start == -1 then
         M.filename_start = string.len(line)
         fname = '.'
@@ -137,14 +156,21 @@ M.parse_line = function(line, path)
             full_path = M.get_parent(path)
         elseif ftype == 'l' then
             full_path = M.resolve_symlink(path .. '/' .. fname)
-            local state = M.get_file_attributes(full_path)
-            -- Check the link is to a file or directory
-            if state.type == "directory" then
-                misc["link_to"] = 'd'
-                misc["link_to_hl_start"] = (M.filename_start - 1) + pos[2]
-                misc["link_to_hl_end"] = string.len(line)
+            misc["fname_with_link_from"] = path .. '/' .. fname
+            -- when full_path is nil, it means the link is broken
+            if full_path == nil then
+                full_path = path
+                misc["link_to"] = "broken"
             else
-                misc["link_to"] = '-'
+                -- Check the link is to a file or directory
+                local state = M.get_file_attributes(full_path)
+                if state.type == "directory" then
+                    misc["link_to"] = 'd'
+                    misc["link_to_hl_start"] = (M.filename_start - 1) + pos[2]
+                    misc["link_to_hl_end"] = string.len(line)
+                else
+                    misc["link_to"] = '-'
+                end
             end
         else
             full_path = M.full_path(M.child_path(path, fname))
@@ -158,9 +184,63 @@ M.parse_line = function(line, path)
         hl_start = hl_start,
         hl_end = hl_end,
         misc = misc,
+        mark = false
     }
 end
 
+
+
+-- File manipulations
+-- TODO: if these is in operations.lua, then delete them
+M.shell_command = function(path)
+    vim.ui.input(
+        { prompt = "Shell command: \n" },
+        function(cmd)
+            if cmd == nil or cmd == ''  then
+                return
+            end
+            -- print(cmd)
+            M._run_shell_command(path, cmd)
+        end
+    )
+end
+
+M._run_shell_command = function(path, cmd)
+    local job_id = vim.fn.jobstart(
+        cmd,
+        {
+            cwd = path,
+            on_stderr = function(_, data, _)
+                for _, line in ipairs(data) do
+                    if line ~= '' then
+                        vim.notify(line, vim.log.levels.ERROR)
+                    end
+                end
+            end,
+            on_exit = function(_,code,_)
+                if code == 0 then
+                    print("Shell command execute successfully")
+                    vim.fn.timer_start(3750, function() vim.cmd([[echon ' ']]) end)
+                end
+            end
+        }
+    )
+end
+
+-- M.create = function(path)
+--     vim.ui.input(
+--         { prompt = "Create file or directory: ", default = path .. '/' },
+--         function(ftc) -- ftc = file to create
+--             if ftc == nil or ftc == ''  then
+--                 return
+--             end
+--             if M.is_file_exist(ftc) then
+--                 vim.notify("Can NOT create, file already exists", vim.log.levels.WARN)
+--             end
+--
+--         end
+--     )
+-- end
 
 
 
