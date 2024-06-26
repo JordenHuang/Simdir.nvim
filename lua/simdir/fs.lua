@@ -158,6 +158,7 @@ M.trim_last = function(path)
 end
 
 
+
 M.get_start_col_of_filename = function(line)
     -- Finds the line that is '..', and calc its start column
     local start_col_of_filename, _ = string.find(line, "..", 1, true)
@@ -354,6 +355,7 @@ M.parse_line_2 = function(line, path)
         end
     end
     return {
+        filename_start = M.filename_start,
         fname = fname,
         ftype = ftype,
         full_path = full_path,

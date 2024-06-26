@@ -99,5 +99,44 @@ M.write_lines = function(buf, s, e, lines)
     vim.api.nvim_buf_set_option(buf, 'modifiable', false)
 end
 
+M.move_cursor = function(last_path, info_table)
+    local fname = vim.fn.fnamemodify(last_path, ":t")
+    if fname == '' then return end
+    for i, data in ipairs(info_table) do
+        if data.fname == fname then
+            vim.api.nvim_win_set_cursor(M.win, {i+1, data.filename_start-1})
+            break
+        end
+    end
+end
+
+
+M.cursor_hijack = function(filename_start)
+    -- Define a function to set the cursor to a fixed column
+    local last_time_row = nil
+    local function set_cursor_fixed_column()
+        local fix_col = filename_start -- Set the fixed column you want the cursor to stay at
+        local cursor = vim.api.nvim_win_get_cursor(0)
+
+        local row, col = cursor[1], cursor[2]
+        col = fix_col - 1 -- `win_set_cursor` expects 0-based column index
+        if row ~= last_time_row then
+            if row > 2 then
+                vim.api.nvim_win_set_cursor(0, {row, col})
+            else
+                vim.api.nvim_win_set_cursor(0, {row, 0})
+            end
+        end
+        last_time_row = row
+    end
+
+    -- Set up autocommands to call the function on cursor movement in normal mode
+    vim.api.nvim_create_autocmd('CursorMoved', {
+        group = 'SimdirCursorHijack',
+        buffer = M.buf.main,
+        callback = set_cursor_fixed_column,
+    })
+end
+
 
 return M

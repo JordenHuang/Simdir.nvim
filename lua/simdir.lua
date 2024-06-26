@@ -1,6 +1,6 @@
 -- TODO:
 -- [x]1. handle permission denied
--- [ ]2. when go to "..", move cursor on the directory that just leave
+-- [x]2. when go to "..", move cursor on the directory that just leave
 -- [x]3. add highlight to first "."
 -- [ ]4. clean up highlight.lua
 
@@ -61,6 +61,7 @@ M.open_dir_test = function(path)
     bf.write_lines(buf, 0, -1, {})
     -- Write path message
     bf.write_lines(buf, 0, -1, {path .. ':'})
+    hl.apply_highlight(buf, 'DiagnosticOk', 0, 0, #path)
 
     for i, line in ipairs(lines) do
         if line ~= '' then
@@ -80,7 +81,7 @@ M.open_dir_test = function(path)
             end
         end
     end
-
+    bf.cursor_hijack(M.info_table[2].filename_start)
 end
 
 -- @param: path: string
@@ -206,7 +207,11 @@ M.open_file_2 = function()
             if new_win then
             end
             -- print("go in to:" .. info.real_path)
+            local last_path = M.info_table[2].full_path
             M.open_dir_test(info.full_path)
+            if info.fname == ".." then
+                bf.move_cursor(last_path, M.info_table)
+            end
         elseif info.ftype == 'l' then
             if info.misc.link_to == '-' then
                 -- if new_win then
@@ -245,6 +250,9 @@ M.setup = function(user_opts)
     end
 
     hl.init_hl_group()
+
+    -- Create an autocommand group
+    vim.api.nvim_create_augroup('SimdirCursorHijack', { clear = true })
 
     vim.api.nvim_create_user_command(
         'Simdir',
