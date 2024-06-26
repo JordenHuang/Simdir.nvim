@@ -16,14 +16,16 @@ M.default_config = {}
 
 M.commands = {
     "open_parent_dir",  -- Open current working directory
-    -- "open_dir",  -- Open specified directory
+    "open_dir",  -- Open specified directory
 }
 
 M.PADDING_LINE_COUNT = 3
 
 M.info_table = {}
 
-M.open_dir_test = function(path)
+
+-- @param: path: string
+M.open_dir = function(path)
     local lines
     local cmd = string.format("ls %s -alh", path)
     local job_id = vim.fn.jobstart(
@@ -68,7 +70,7 @@ M.open_dir_test = function(path)
             -- Write lines to buffer
             bf.write_lines(buf, -1, -1, {line})
             -- print(line)
-            local tbl = fs.parse_line_2(line, path)
+            local tbl = fs.parse_line(line, path)
             table.insert(M.info_table, tbl)
             -- print(vim.inspect(tbl))
             if tbl.ftype == 'd' then
@@ -84,120 +86,14 @@ M.open_dir_test = function(path)
     bf.cursor_hijack(M.info_table[2].filename_start)
 end
 
--- @param: path: string
-M.open_dir = function(path)
-    print('Path: ' .. path)
-
-    M.info_table = {}
-
-    local buf = bf.buf_open()
-
-    -- Clear the buffer content
-    bf.write_lines(buf, 0, -1, {})
-
-    -- Write path message
-    bf.write_lines(buf, 0, -1, {path .. ':'})
-
-    local line_count = 0
-    local start_col_of_filename = nil
-
-    local function on_output(_, data, _)
-        if not data then
-            return
-        end
-
-        for _, line in ipairs(data) do
-            if line ~= '' then
-                -- print(line)
-                -- Write lines to buffer
-                bf.write_lines(buf, -1, -1, {line})
-
-                line_count = line_count + 1
-                -- Line 3 is '..'
-                if line_count == 3 then
-                    start_col_of_filename = fs.get_start_col_of_filename(line)
-                end
-
-                if line_count >= 3 then
-                    local tbl = fs.parse_line(line, start_col_of_filename, path)
-                    table.insert(M.info_table, tbl)
-
-                    if tbl.type == 'd' then
-                        hl.apply_highlight(buf, 'Simdir_hl_dirname', line_count, start_col_of_filename-1, string.len(line))
-                    elseif tbl.type == 'l' then
-                        local s = tbl.misc.s
-                        local e = tbl.misc.e
-                        hl.apply_highlight(buf, 'Simdir_hl_symlink', line_count, start_col_of_filename-1, start_col_of_filename+s-2)
-                        if tbl.misc.link_info == 'd' then
-                            hl.apply_highlight(buf, 'Simdir_hl_dirname', line_count, start_col_of_filename+e-1, string.len(line))
-                        end
-                    end
-                end
-            end
-        end
-
-    end
-
-    local cmd = string.format("ls %s -alh", path)
-    vim.fn.jobstart(
-        cmd,
-        {
-            stdout_buffered = true,
-            stderr_buffered = true,
-            on_stdout = on_output,
-            on_stderr = function(_, data, _)
-                for _, line in ipairs(data) do
-                    print(line)
-                end
-            end,
-            on_exit = function(_, code, _)
-                print("exit with code:", code)
-                -- print(vim.inspect(M.info_table))
-            end
-        }
-    )
-end
-
 M.open_parent_dir = function()
     local path = uv.cwd()
     M.open_dir(path)
 end
 
 
--- @parm: new_win : boolean
-M.open_file = function(new_win)
-    local line_nr = vim.api.nvim_win_get_cursor(bf.win)[1]
-    line_nr = line_nr - M.PADDING_LINE_COUNT
-    if line_nr > 0 then
-        local info = M.info_table[line_nr]
 
-        if info.type == 'd' then
-            if new_win then
-            end
-            -- print("go in to:" .. info.real_path)
-            M.open_dir(info.real_path)
-        elseif info.type == 'l' then
-            if info.misc.link_info == '-' then
-                if new_win then
-                    vim.cmd('rightbelow split')
-                end
-                vim.cmd('edit ' .. info.real_path)
-            else
-                -- print("go in to:" .. info.real_path)
-                M.open_dir(info.real_path)
-            end
-        else
-            local file_path = info.real_path
-            print(file_path)
-            if new_win then
-                vim.cmd('rightbelow split')
-            end
-            vim.cmd('edit ' .. file_path)
-        end
-    end
-end
-
-M.open_file_2 = function()
+M.open_file = function()
     local line_nr = vim.api.nvim_win_get_cursor(bf.win)[1]
     line_nr = line_nr - 1
     if line_nr > 0 then
@@ -208,7 +104,7 @@ M.open_file_2 = function()
             end
             -- print("go in to:" .. info.real_path)
             local last_path = M.info_table[2].full_path
-            M.open_dir_test(info.full_path)
+            M.open_dir(info.full_path)
             if info.fname == ".." then
                 bf.move_cursor(last_path, M.info_table)
             end
@@ -220,7 +116,7 @@ M.open_file_2 = function()
                 vim.cmd('edit ' .. info.full_path)
             else
                 -- print("go in to:" .. info.real_path)
-                M.open_dir_test(info.full_path)
+                M.open_dir(info.full_path)
             end
         else
             print(info.full_path)
@@ -235,10 +131,33 @@ end
 
 
 M.determine = function(opts)
+    -- Open parent directory
     if opts.args == M.commands[1] then
         M.open_parent_dir()
-    else
-        M.open_dir_test(uv.cwd())
+    -- Open specified directory
+    elseif opts.args == M.commands[2] then
+        vim.ui.input(
+            { prompt = "Open directory: ", default = uv.cwd(), completion = "dir"},
+            function(pto)  -- pto = path to open
+                if pto == nil then
+                    return
+                elseif pto == '' then
+                    M.open_parent_dir()
+                    return
+                end
+
+                local stat = uv.fs_stat(pto)
+                if not stat then
+                    vim.cmd([[echon ' ']])
+                    vim.notify("No such directory: " .. pto, vim.log.levels.ERROR)
+                else
+                    if stat.type == "file" then
+                        pto = fs.trim_last(pto)
+                    end
+                    M.open_dir(pto)
+                end
+            end
+        )
     end
 end
 
@@ -267,6 +186,7 @@ M.setup = function(user_opts)
         }
     )
 
+    -- TODO: remove it
     vim.api.nvim_set_keymap('n', '<leader>se', ":Lazy reload simdir.nvim<CR>", {noremap = true})
 end
 

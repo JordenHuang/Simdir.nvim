@@ -64,9 +64,9 @@ M.create_buf = function()
     -- Pressing r to reload
     vim.api.nvim_buf_set_keymap(buf, 'n', 'r', ":", {silent=true, noremap=true, desc=""})
     -- Jump to file when hit enter
-    vim.api.nvim_buf_set_keymap(buf, 'n', "<CR>", ":lua require('simdir').open_file(false)<CR>", {silent=true, noremap=true, desc="Simdir open file"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', "<CR>", ":lua require('simdir').open_file()<CR>", {silent=true, noremap=true, desc="Simdir open file"})
     -- Open in new window
-    vim.api.nvim_buf_set_keymap(buf, 'n', "o", ":lua require('simdir').open_file_2()<CR>", {silent=true, noremap=true, desc="Simdir open file in new window"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', "o", ":lua require('simdir').open_file()<CR>", {silent=true, noremap=true, desc="Simdir open file in new window"})
 
     M.buf.main = buf
     return buf
