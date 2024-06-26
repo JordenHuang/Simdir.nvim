@@ -1,8 +1,8 @@
 -- TODO:
--- 1. handle permission denied
--- 2. when go to "..", move cursor on the directory that just leave
--- 3. add highlight to first "."
--- 4. clean up highlight.lua
+-- [x]1. handle permission denied
+-- [ ]2. when go to "..", move cursor on the directory that just leave
+-- [x]3. add highlight to first "."
+-- [ ]4. clean up highlight.lua
 
 local M = {}
 
@@ -37,18 +37,21 @@ M.open_dir_test = function(path)
             end,
             on_stderr = function(_, data, _)
                 for _, line in ipairs(data) do
-                    print(line)
+                    vim.schedule(function() vim.notify(line, vim.log.levels.ERROR) end)
                 end
             end,
             on_exit = function(_, code, _)
-                print("exit with code:", code)
+                -- print("exit with code:", code)
                 -- print(vim.inspect(M.info_table))
+                return
             end
         }
     )
-    vim.fn.jobwait({job_id})
+    -- return if exit_code is not 0
+    local exit_code = vim.fn.jobwait({job_id})
+    if exit_code[1] ~= 0 then return end
 
-    print('Path: ' .. path)
+    -- print('Path: ' .. path)
 
     M.info_table = {}
 
