@@ -184,7 +184,7 @@ M.parse_line = function(line, path)
         hl_start = hl_start,
         hl_end = hl_end,
         misc = misc,
-        mark = false
+        mark = ''
     }
 end
 

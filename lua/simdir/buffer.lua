@@ -142,34 +142,37 @@ M.buf_set_keymaps = function(buf)
     local function h(key)
         return string.format(":lua require('simdir').key_operate('%s')<CR>", key)
     end
+    local function opts(desc)
+        return {silent=true, noremap=true, desc=desc, nowait=true}
+    end
     -- Jump to file when hit enter
-    vim.api.nvim_buf_set_keymap(buf, 'n', "<CR>", h("CR"), {silent=true, noremap=true, desc="Simdir open file"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', "<CR>", h("CR"), opts("Simdir open file"))
     -- Open in new window, (Not yet implement)
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'o', h('o'), {silent=true, noremap=true, desc="Simdir open file in new window"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'o', h('o'), opts("Simdir open file in new window"))
     -- T to touch file
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'T', h('T'), {silent=true, noremap=true, desc="Simdir touch file"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'T', h('T'), opts("Simdir touch file"))
     -- + for create a directory
-    vim.api.nvim_buf_set_keymap(buf, 'n', '+', h('+'), {silent=true, noremap=true, desc="Simdir mkdir"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', '+', h('+'), opts("Simdir mkdir"))
     -- R to rename
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'R', h('R'), {silent=true, noremap=true, desc="Simdir rename file/dir"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'R', h('R'), opts("Simdir rename file/dir"))
     -- M for move
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'M', h('M'), {silent=true, noremap=true, desc="Simdir move file/dir"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'M', h('M'), opts("Simdir move file/dir"))
     -- Set mark to a line
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'm', h('m'), {silent=true, noremap=true, desc="Simdir set mark"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'm', h('m'), opts("Simdir set mark"))
     -- Set d mark to a line
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'd', h('d'), {silent=true, noremap=true, desc="Simdir set d mark"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'd', h('d'), opts("Simdir set d mark"))
     -- Unmark to a line
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'u', h('u'), {silent=true, noremap=true, desc="Simdir set d mark"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'u', h('u'), opts("Simdir unmark"))
     -- Unmark all
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'U', h('U'), {silent=true, noremap=true, desc="Simdir set d mark"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'U', h('U'), opts("Simdir unmark all"))
     -- Invert marks
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'i', h('i'), {silent=true, noremap=true, desc="Simdir set d mark"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'i', h('i'), opts("Simdir invert marks"))
     -- Delete the d marks files/dirs
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'x', h('x'), {silent=true, noremap=true, desc="Simdir set d mark"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'x', h('x'), opts("Simdir delete d mark files"))
     -- Pressing r to reload
-    vim.api.nvim_buf_set_keymap(buf, 'n', 'r', h('r'), {silent=true, noremap=true, desc="Simdir reload"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', 'r', h('r'), opts("Simdir reload"))
     -- Run shell command
-    vim.api.nvim_buf_set_keymap(buf, 'n', "s!", h("s!"), {silent=true, noremap=true, desc="Simdir run shell command"})
+    vim.api.nvim_buf_set_keymap(buf, 'n', "s!", h("s!"), opts("Simdir run shell command"))
 
     -- Ctrl+c to kill command
     vim.api.nvim_buf_set_keymap(buf, 'n', "<C-c>", ":lua require('simdir.operations').interrupt_program()<CR>", {silent=true, noremap=true, desc="Simdir interrupt command"})

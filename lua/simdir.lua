@@ -3,6 +3,7 @@
 -- [x]2. when go to "..", move cursor on the directory that just leave
 -- [x]3. add highlight to first "."
 -- [ ]4. clean up highlight.lua
+-- [ ]5. add highlight to mark, d mark
 
 local M = {}
 
@@ -129,7 +130,8 @@ end
 
 -- @key : string
 M.key_operate = function(key)
-    local line_nr = vim.api.nvim_win_get_cursor(bf.win)[1] - M.PADDING_LINE_COUNT
+    local real_line_nr = vim.api.nvim_win_get_cursor(bf.win)[1]
+    local line_nr = real_line_nr - M.PADDING_LINE_COUNT
     if line_nr <= 0 then return end
 
     local info = M.info_table[line_nr]
@@ -157,28 +159,52 @@ M.key_operate = function(key)
 
         -- move
     elseif key == 'M' then
-        op.move(path)
+        local marks = {}
+        for _, v in ipairs(M.info_table) do
+            if v.mark == 'm' then
+                table.insert(marks, v)
+            end
+        end
+        print(vim.inspect(marks))
+        if #marks == 0 then
+            if info.ftype == 'l' then
+                op.rename(info.misc.fname_with_link_from, info.fname)
+            else
+                op.rename(info.full_path, info.fname)
+            end
+        else
+            op.move(marks, path)
+        end
         -- vim.notify("TODO: M for move, allow mark", vim.log.levels.WARN)
 
         -- set mark
     elseif key == 'm' then
-        vim.api.nvim_buf_set_keymap(bf.buf, 'n', 'm', ":echo 'TODO'<CR>", {silent=true, noremap=true, desc=""})
+        op.set_mark(M.info_table, line_nr, real_line_nr, 'm')
+        print(vim.inspect(M.info_table))
+        -- vim.notify("TODO: m for mark", vim.log.levels.WARN)
 
         -- set d mark
     elseif key == 'd' then
-        vim.notify("TODO: d for d mark", vim.log.levels.WARN)
+        op.set_mark(M.info_table, line_nr, real_line_nr, 'd')
+        print(vim.inspect(M.info_table))
+        -- vim.notify("TODO: d for d mark", vim.log.levels.WARN)
 
         -- unmark
     elseif key == 'u' then
-        vim.notify("TODO: r for reload", vim.log.levels.WARN)
+        op.set_mark(M.info_table, line_nr, real_line_nr, '')
+        print(vim.inspect(M.info_table))
+        -- vim.notify("TODO: u for unmark", vim.log.levels.WARN)
 
         -- unmark all
     elseif key == 'U' then
-        vim.notify("TODO: U for unmark all", vim.log.levels.WARN)
+        op.unmark_all(M.info_table, real_line_nr)
+        -- vim.notify("TODO: U for unmark all", vim.log.levels.WARN)
 
         -- invert marks
     elseif key == 'i' then
-        vim.notify("TODO: i for invert marks", vim.log.levels.WARN)
+        op.invert_mark(M.info_table, M.PADDING_LINE_COUNT)
+        print(vim.inspect(M.info_table))
+        -- vim.notify("TODO: i for invert marks", vim.log.levels.WARN)
 
         -- do delete on d mark files
     elseif key == 'x' then
@@ -196,7 +222,32 @@ M.key_operate = function(key)
 
     end
 
-    if key ~= 'r' then M.open_dir(M.info_table[1].full_path) end
+    -- These keys don't need to reload the buffer
+    local no_need_reload_keys = {'o', "CR", 'm', 'd', 'u', 'U', 'i', 'r'}
+    for _, v in ipairs(no_need_reload_keys) do
+        if key == v then return end
+    end
+
+    -- save last info_table
+    local last_info_table = M.info_table
+    -- reload
+    M.open_dir(M.info_table[1].full_path)
+    -- Handle x key, it needs reload, but m marks should remain
+    if key == 'x' then
+        local i = 1
+        for _, data in ipairs(last_info_table) do
+            if M.info_table[i].full_path == data.full_path then
+                M.info_table[i].mark = data.mark
+                M.info_table[i].misc.sign_id = data.misc.sign_id
+                i = i + 1
+            end
+        end
+    else
+        for i, data in ipairs(last_info_table) do
+            M.info_table[i].mark = data.mark
+        end
+    end
+
     -- TODO: maybe add a "You might need to reload" in the open_dir function, because if the buffer is not update
     -- the ls command will throw error
 end

@@ -1,6 +1,8 @@
 local M = {}
 
+local bf = require('simdir.buffer')
 local fs = require('simdir.fs')
+local hl = require('simdir.highlight')
 
 M.job_id = nil
 M.pid = nil
@@ -97,7 +99,7 @@ M.rename = function(from, old_fname)
                 vim.notify("Can't create directory while renaming", vim.log.levels.ERROR)
             end
 
-            success = vim.loop.fs_rename(from, to)
+            success = vim.uv.fs_rename(from, to)
             if success then
                 local msg = "Rename file/directory successfully"
                 vim.schedule(function() print_and_sleep(msg) end)
@@ -123,7 +125,70 @@ M.rename = function(from, old_fname)
 end
 
 -- TODO: move allow all marked files to be move at once
-M.move = M.rename
+M.move = function(marks, path)
+    vim.ui.input(
+        { prompt = "Move to: ", default = path },
+        function(to)
+            if to == nil or to == '' then
+                return
+            end
+            -- Move while allowing to create directory
+            local success = pcall(function() vim.fn.mkdir(fs.get_parent(to), 'p') end)
+            if not success then
+                vim.notify("Can't create directory while renaming", vim.log.levels.ERROR)
+            end
+
+            for _, m in ipairs(marks) do
+                if m.ftype == 'l' then
+                    success = vim.uv.fs_rename(m.misc.fname_with_link_from, to)
+                else
+                    success = vim.uv.fs_rename(m.full_path, to)
+                end
+                print('from', m.full_path)
+                if success then
+                    local msg = "Move file/directory successfully"
+                    vim.schedule(function() print_and_sleep(msg) end)
+                else
+                    vim.notify("Can't move file/directory", vim.log.levels.ERROR)
+                end
+            end
+        end)
+end
+
+
+-- table is pass by reference
+M.set_mark = function(info_table, line_nr, real_line_nr, mark_type)
+    -- Don't set mark on the '.' and ".." directory
+    if line_nr == 1 or line_nr == 2 then return end
+    info_table[line_nr].mark = mark_type
+
+    local bufnr = bf.buf.main
+    -- hl.place_sign(bufnr, line_nr, mark_type)
+    local sign_id = hl.place_sign(bufnr, info_table[line_nr].misc.sign_id, real_line_nr, mark_type)
+    info_table[line_nr].misc.sign_id = sign_id
+end
+
+M.unmark_all = function(info_table, real_line_nr)
+    for i = 3, #info_table do
+        M.set_mark(info_table, i, real_line_nr, '')
+    end
+end
+
+-- Only invert m mark
+M.invert_mark = function(info_table, padding_line_count)
+    for i = 3, #info_table do
+        if info_table[i].mark ~= 'd' then
+            if info_table[i].mark == 'm' then
+                M.set_mark(info_table, i, i+padding_line_count, '')
+            else
+                M.set_mark(info_table, i, i+padding_line_count, 'm')
+            end
+        end
+    end
+end
+
+
+
 
 M.shell_command = function(prompt, command, path, msg)
     vim.ui.input(
