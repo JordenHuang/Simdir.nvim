@@ -12,6 +12,7 @@ local fs = require('simdir.fs')
 local bf = require('simdir.buffer')
 local hl = require('simdir.highlight')
 local op = require('simdir.operations')
+local newop = require('simdir.new_ops')
 
 
 M.default_config = {}
@@ -139,23 +140,28 @@ M.key_operate = function(key)
 
     -- open file or directory, (don't know why "<CR>" string doesn't work)
     if key == 'o' or key == "CR" then
-        M.open_file()
+        if info.fname ~= '.' then
+            M.open_file()
+        end
 
         -- touch command, for creating empty file
     elseif key == 'T' then
-        op.touch(path)
+        -- op.touch(path)
+        newop.touch(path)
 
         -- mkdir command
     elseif key == '+' then
-        op.mkdir(path)
+        -- op.mkdir(path)
+        newop.mkdir(path)
 
         -- rename
     elseif key == 'R' then
-        if info.ftype == 'l' then
-            op.rename(info.misc.fname_with_link_from, info.fname)
-        else
-            op.rename(info.full_path, info.fname)
-        end
+        -- if info.ftype == 'l' then
+        --     op.rename(info.misc.fname_with_link_from, info.fname)
+        -- else
+        --     op.rename(info.full_path, info.fname)
+        -- end
+        newop.rename(info.fname, path)
 
         -- move
     elseif key == 'M' then
@@ -165,34 +171,30 @@ M.key_operate = function(key)
                 table.insert(marks, v)
             end
         end
-        print(vim.inspect(marks))
+        -- print(vim.inspect(marks))
         if #marks == 0 then
-            if info.ftype == 'l' then
-                op.rename(info.misc.fname_with_link_from, info.fname)
-            else
-                op.rename(info.full_path, info.fname)
-            end
-        else
-            op.move(marks, path)
+            table.insert(marks, info)
         end
+        -- op.move(marks, path)
+        newop.move(marks, path)
         -- vim.notify("TODO: M for move, allow mark", vim.log.levels.WARN)
 
         -- set mark
     elseif key == 'm' then
         op.set_mark(M.info_table, line_nr, real_line_nr, 'm')
-        print(vim.inspect(M.info_table))
+        -- print(vim.inspect(M.info_table))
         -- vim.notify("TODO: m for mark", vim.log.levels.WARN)
 
         -- set d mark
     elseif key == 'd' then
         op.set_mark(M.info_table, line_nr, real_line_nr, 'd')
-        print(vim.inspect(M.info_table))
+        -- print(vim.inspect(M.info_table))
         -- vim.notify("TODO: d for d mark", vim.log.levels.WARN)
 
         -- unmark
     elseif key == 'u' then
         op.set_mark(M.info_table, line_nr, real_line_nr, '')
-        print(vim.inspect(M.info_table))
+        -- print(vim.inspect(M.info_table))
         -- vim.notify("TODO: u for unmark", vim.log.levels.WARN)
 
         -- unmark all
@@ -203,7 +205,7 @@ M.key_operate = function(key)
         -- invert marks
     elseif key == 'i' then
         op.invert_mark(M.info_table, M.PADDING_LINE_COUNT)
-        print(vim.inspect(M.info_table))
+        -- print(vim.inspect(M.info_table))
         -- vim.notify("TODO: i for invert marks", vim.log.levels.WARN)
 
         -- do delete on d mark files
@@ -212,14 +214,15 @@ M.key_operate = function(key)
 
         -- reload
     elseif key == 'r' then
+        local old_info_table = M.info_table
         M.open_dir(M.info_table[1].full_path)
+        newop.reload(M.info_table, old_info_table, M.PADDING_LINE_COUNT)
+        -- print(vim.inspect(M.info_table))
         -- vim.notify("TODO: r for reload", vim.log.levels.WARN)
-        -- vim.api.nvim_buf_set_keymap(bf.buf, 'n', 'r', ":echo 'TODO'<CR>", {silent=true, noremap=true, desc=""})
 
         -- shell command
     elseif key == "s!" then
         fs.shell_command(M.info_table[1].full_path)
-
     end
 
     -- These keys don't need to reload the buffer
@@ -229,24 +232,21 @@ M.key_operate = function(key)
     end
 
     -- save last info_table
-    local last_info_table = M.info_table
+    local old_info_table = M.info_table
     -- reload
     M.open_dir(M.info_table[1].full_path)
+    newop.reload(M.info_table, old_info_table, M.PADDING_LINE_COUNT)
+
     -- Handle x key, it needs reload, but m marks should remain
-    if key == 'x' then
-        local i = 1
-        for _, data in ipairs(last_info_table) do
-            if M.info_table[i].full_path == data.full_path then
-                M.info_table[i].mark = data.mark
-                M.info_table[i].misc.sign_id = data.misc.sign_id
-                i = i + 1
-            end
-        end
-    else
-        for i, data in ipairs(last_info_table) do
-            M.info_table[i].mark = data.mark
-        end
-    end
+    -- if key == 'x' then
+    -- else
+    --     local i = 1
+    --     for _, data in ipairs(last_info_table) do
+    --         if M.info_table[i].full_path == data.full_path then
+    --             M.info_table[i].mark = data.mark
+    --             i = i + 1
+    --             if i > #M.info_table then break end
+    --         end
 
     -- TODO: maybe add a "You might need to reload" in the open_dir function, because if the buffer is not update
     -- the ls command will throw error
