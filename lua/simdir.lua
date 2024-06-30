@@ -7,6 +7,10 @@
 
 local M = {}
 
+
+local dev = require('simdir.dev')
+
+
 local uv = vim.uv
 local fs = require('simdir.fs')
 local bf = require('simdir.buffer')
@@ -20,6 +24,7 @@ M.default_config = {}
 M.commands = {
     "open_parent_dir",  -- Open current working directory
     "open_dir",  -- Open specified directory
+    "dev_open_parent"
 }
 
 M.info_table = {}
@@ -288,6 +293,8 @@ M.determine = function(opts)
                 end
             end
         )
+    elseif opts.args == M.commands[3] then
+        dev.open_parent_dir()
     end
 end
 
@@ -298,7 +305,10 @@ M.setup = function(user_opts)
         M.config = M.default_config
     end
 
-    hl.init_hl_group()
+    -- hl.init_hl_group()
+
+    -- TODO: Remember to move it to simdir.lua
+    require('simdir.dev-core').init_hl_group()
 
     -- Create an autocommand group
     vim.api.nvim_create_augroup('SimdirCursorHijack', { clear = true })
@@ -317,8 +327,7 @@ M.setup = function(user_opts)
         }
     )
 
-    -- TODO: remove it
-    vim.api.nvim_set_keymap('n', '<leader>se', ":Lazy reload simdir.nvim<CR>", {noremap = true})
+    -- vim.api.nvim_set_keymap('n', '<leader>ss', ":lua require('simdir').<CR>", {noremap = true})
 end
 
 return M
