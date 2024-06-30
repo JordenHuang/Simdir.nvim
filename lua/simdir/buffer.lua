@@ -1,3 +1,12 @@
+-- TODO:
+-- use below to create a window for command input
+-- I think I might discard the current way of doing file system manipulations
+-- Just let the user enter the command when they press the predefine keys,
+-- buf with the command and args complete for them
+-- They just need to enter the part they need to specified
+-- vim.api.nvim_win_set_option(win, 'scrolloff', 0)
+-- vim.api.nvim_win_set_height(win, 5)
+
 local M = {}
 
 
