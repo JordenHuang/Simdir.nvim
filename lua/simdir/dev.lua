@@ -5,6 +5,7 @@
 local M = {}
 
 local core = require('simdir.dev-core')
+local ops = require('simdir.dev-operations')
 
 M.info_table = {}
 
@@ -92,6 +93,120 @@ M.open_path = function()
         end
     else
         vim.cmd('edit ' .. data.fpath)
+    end
+end
+
+M.reload_wrap = function(path)
+    return vim.schedule_wrap(function()
+        local prev_info_table = M.info_table
+        M.open_dir(path)
+        -- Copy marks
+        local i = 1
+        for j = 1, #prev_info_table do
+            if M.info_table[i].fpath == prev_info_table[j].fpath then
+                M.info_table[i].mark = prev_info_table[j].mark
+                i = i + 1
+            end
+            if i > #M.info_table then break end
+        end
+        -- Set sign column
+        for j, _ in ipairs(M.info_table) do
+            ops.set_mark(core.buf, M.info_table, j+1, M.info_table[j].mark)
+        end
+        -- ops._copy_marks(M.info_table, prev_info_table)
+    end)
+end
+
+M.keys = function(key)
+    if vim.api.nvim_get_current_win() ~= core.win_id then return end
+
+    local path = M.info_table[2].fpath
+
+    local cursor_pos = vim.api.nvim_win_get_cursor(0)
+    local line_nr = cursor_pos[1]
+    if line_nr == 1 or line_nr == 2 then return end
+    local data = M.info_table[line_nr - 1]
+
+    local reload_wrap = M.reload_wrap(path)
+    -- open file or directory
+    if key == 'o' or key == "CR" then
+        M.open_path()
+
+        -- touch command, for creating empty file
+    elseif key == 'T' then
+        ops.touch(path, reload_wrap)
+
+        -- mkdir command
+    elseif key == '+' then
+        ops.mkdir(path, reload_wrap)
+
+        -- rename
+    elseif key == 'R' then
+        ops.rename(path, data.fname, reload_wrap)
+
+        -- move
+    elseif key == 'M' then
+        local marks = {}
+        for i=4, #M.info_table do
+            if M.info_table[i].mark == 'm' then
+                table.insert(marks, M.info_table[i])
+            end
+        end
+        if #marks == 0 then table.insert(marks, data) end
+        ops.move(path, marks, reload_wrap)
+
+        -- set mark
+    elseif key == 'm' then
+        ops.set_mark(core.buf, M.info_table, line_nr, 'm')
+        ops.move_cursor_down(core.buf.bufnr, core.win_id)
+
+        -- set d mark
+    elseif key == 'd' then
+        ops.set_mark(core.buf, M.info_table, line_nr, 'd')
+        ops.move_cursor_down(core.buf.bufnr, core.win_id)
+
+        -- unmark
+    elseif key == 'u' then
+        ops.set_mark(core.buf, M.info_table, line_nr, '')
+        ops.move_cursor_down(core.buf.bufnr, core.win_id)
+
+        -- unmark all
+    elseif key == 'U' then
+        for i=4, #M.info_table do
+            ops.set_mark(core.buf, M.info_table, i+1, '')
+        end
+
+        -- invert marks
+    elseif key == 'i' then
+        for i=4, #M.info_table do
+            if M.info_table[i].mark ~= 'd' then
+                if M.info_table[i].mark == 'm' then
+                    ops.set_mark(core.buf, M.info_table, i+1, '')
+                else
+                    ops.set_mark(core.buf, M.info_table, i+1, 'm')
+                end
+            end
+        end
+
+        -- do delete on d mark files
+    elseif key == 'x' then
+
+        -- reload
+    elseif key == 'r' then
+        -- local prev_info_table = M.info_table
+        -- M.open_dir(path)
+        -- ops._copy_marks(M.info_table, prev_info_table)
+        -- print(vim.inspect(M.info_table))
+        reload_wrap()
+
+        -- shell command
+    elseif key == "s!" then
+    end
+
+    -- These keys don't need to reload the buffer
+    local no_need_reload_keys = {"CR", 'o', 'm', 'd', 'u', 'U', 'i', 'r'}
+    for _, v in ipairs(no_need_reload_keys) do
+        if key == v then return end
     end
 end
 

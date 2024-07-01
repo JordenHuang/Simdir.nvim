@@ -3,6 +3,8 @@ Buffer.__index = Buffer
 
 function Buffer:new()
     local obj = setmetatable({}, self)
+    self.bufnr = nil
+    self.sign_id = {}
     return obj
 end
 
@@ -53,6 +55,17 @@ end
 function Buffer:set_hl(ns_id, hl_group, row, start_col, end_col)
     -- Add the highlight to the specified range
     vim.api.nvim_buf_add_highlight(self.bufnr, ns_id, hl_group, row, start_col, end_col)
+end
+
+function Buffer:set_sign_col(linenr, mtype)
+    if self.sign_id[linenr] then
+        vim.fn.sign_unplace("Simdir_sign_group", { buffer = self.bufnr, id = self.sign_id[linenr] })
+    end
+    if mtype == 'm' then
+        self.sign_id[linenr] = vim.fn.sign_place(0, "Simdir_sign_group", "Simdir_m_mark", self.bufnr, { lnum = linenr, priority = 10 })
+    elseif mtype == 'd' then
+        self.sign_id[linenr] = vim.fn.sign_place(0, "Simdir_sign_group", "Simdir_d_mark", self.bufnr, { lnum = linenr, priority = 10 })
+    end
 end
 
 return Buffer

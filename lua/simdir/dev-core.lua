@@ -5,9 +5,19 @@ local Buffer = require('simdir.dev-buffer')
 M.buf = Buffer:new()
 
 M.default_keymaps = {
-    ["<CR>"] = ":lua require('simdir.dev').open_path()<CR>",
+    ["<CR>"] = ":lua require('simdir.dev').keys('CR')<CR>",
     ['o'] = ":echo 'you pressed o'<CR>",
-    ['q'] = ":q<CR>"
+    ['q'] = ":q<CR>",
+    ['+'] = ":lua require('simdir.dev').keys('+')<CR>",
+    ['T'] = ":lua require('simdir.dev').keys('T')<CR>",
+    ['R'] = ":lua require('simdir.dev').keys('R')<CR>",
+    ['M'] = ":lua require('simdir.dev').keys('M')<CR>",
+    ['m'] = ":lua require('simdir.dev').keys('m')<CR>",
+    ['d'] = ":lua require('simdir.dev').keys('d')<CR>",
+    ['u'] = ":lua require('simdir.dev').keys('u')<CR>",
+    ['U'] = ":lua require('simdir.dev').keys('U')<CR>",
+    ['i'] = ":lua require('simdir.dev').keys('i')<CR>",
+    ['r'] = ":lua require('simdir.dev').keys('r')<CR>",
 }
 
 M.hl_ns_id = nil
@@ -23,21 +33,21 @@ M.buf_open = function(keymaps)
         M.buf:create()
         -- vim.cmd('split')
     end
-        vim.api.nvim_buf_set_name(M.buf.bufnr, "Simdir-dev")
-        M.buf:set_options({
-            buftype = "nofile",
-            modifiable = false,
-            swapfile = false,
-            buflisted = true
-        })
+    vim.api.nvim_buf_set_name(M.buf.bufnr, "Simdir-dev")
+    M.buf:set_options({
+        buftype = "nofile",
+        modifiable = false,
+        swapfile = false,
+        buflisted = true
+    })
 
-        if #keymaps == 0 then keymaps = M.default_keymaps end
-        for k, v in pairs(keymaps) do
-            M.buf:set_keymap('n', k, v, '')
-        end
+    if #keymaps == 0 then keymaps = M.default_keymaps end
+    for k, v in pairs(keymaps) do
+        M.buf:set_keymap('n', k, v, '')
+    end
 
-        M.buf:open_in_window()
-    -- end
+    M.buf:open_in_window()
+    M.win_id = vim.api.nvim_get_current_win()
 end
 
 M.move_cursor_on_last_directory = function(last_path, info_table, padding)
@@ -198,6 +208,7 @@ M.parse_lines = function(lines, path)
                     fpath = fpath,
                     fname_hl_s = fname_hl_s,
                     fname_hl_e = fname_hl_e,
+                    mark = '',
                     misc = misc
                 }
             end
