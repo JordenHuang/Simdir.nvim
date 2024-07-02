@@ -10,8 +10,6 @@ M.create_prompt_window = function()
     buf:create()
     vim.api.nvim_buf_set_name(buf.bufnr, "Simdir-command")
     buf:set_keymap('n', 'q', ":q<CR>", '')
-    -- buf:set_keymap('n', '<CR>', ":q<CR>", '')
-    buf:set_keymap('n', '<C-c>', ":lua require('simdir.dev-operations').interrupt_program()<CR>", '')
 
     -- Set buftype to prompt
     buf:set_options({ buftype = "prompt" })
@@ -31,15 +29,24 @@ M.get_prompt = function(pmt, path, msg, reload_callback)
     vim.api.nvim_feedkeys(msg.feed, 'i', false)
 
     vim.fn.prompt_setcallback(ops_buf.bufnr, function(cmd)
-        cmd = vim.fn.fnameescape(cmd)
+        -- Modify cmd only if pmt is in commands list
+        local commands = {"touch", "mkdir", "mv", "rm"}
+        for _, v in ipairs(commands) do
+            if pmt == v then
+                cmd = vim.fn.fnameescape(cmd)
+                break
+            end
+        end
+
         vim.cmd('bdelete!')
-            -- print(pmt .. cmd)
-            cmd = pmt .. cmd
-            M._run_shell_command(path, cmd, msg.msg)
+        cmd = pmt .. cmd
+        M._run_shell_command(path, cmd, msg.msg)
         vim.schedule(function()
             vim.cmd('stopinsert')
             reload_callback()
+-- print("after callback")
         end)
+-- print("after sche")
     end)
 
     vim.fn.prompt_setinterrupt(ops_buf.bufnr, function()
@@ -96,6 +103,26 @@ M.set_mark = function(buf, info_table, linenr, mark_type)
     buf:set_sign_col(linenr, mark_type)
 end
 
+M.remove = function(path, marks, reload_callback, to_trash)
+    local pmt = 'rm -r '
+    if to_trash then
+        pmt = 'mv '
+    end
+
+    for _, v in ipairs(marks) do
+        pmt = pmt .. vim.fn.fnameescape(v.fname) .. ' '
+    end
+    local msg = { op_name="Remove", feed='', msg=string.format("%d files/directories removed", #marks) }
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
+end
+
+M.shell_command = function(path, reload_callback)
+    local msg = { op_name="Shell command", feed='', msg="Command executed"}
+    M.create_prompt_window()
+    M.get_prompt('', path, msg, reload_callback)
+end
+
 
 -- Utility functions
 -- Move to next line
@@ -110,7 +137,9 @@ local function print_and_sleep(msg)
     print(msg)
     vim.schedule(function()
         vim.fn.timer_start(3750, function() vim.cmd([[echon ' ']]) end)
+-- print("after timer")
     end)
+-- print("after sche, in print and sleep")
 end
 
 M._run_shell_command = function(path, cmd, msg)
@@ -128,31 +157,25 @@ M._run_shell_command = function(path, cmd, msg)
             on_exit = function(_,code,_)
                 if code == 0 then
                     print_and_sleep(msg)
-                    -- print(msg)
-                    -- vim.schedule(function()
-                    --     vim.fn.timer_start(3750, function() vim.cmd([[echon ' ']]) end)
-                    -- end)
                     M.job_id = nil
                 end
             end
         }
     )
+    local exit_code = vim.fn.jobwait({M.job_id}, 2000)
+    if exit_code[1] == -1 then vim.notify("Timeout exceed", vim.log.levels.WARN) end
 end
 
 
+-- Unused function
 M.interrupt_program = function()
-    -- Ctrl+c to quit program
-    -- see como/buffer.lua
+    -- Quit program
     if M.job_id then
         if vim.fn.jobstop(M.job_id) == 0 then
             local msg = string.format("Job %d has been terminated", M.job_id)
             vim.notify(msg, vim.log.levels.INFO)
         end
     end
-    -- if M.pid then
-    --     -- print('M.pid:', M.pid)
-    --     vim.uv.kill(M.pid, 9)
-    -- end
 end
 
 return M

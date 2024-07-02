@@ -1,7 +1,3 @@
--- TODO:
--- 1. marks
--- 2. shell command enter buffer
--- 3. key maps
 local M = {}
 
 local core = require('simdir.dev-core')
@@ -31,9 +27,9 @@ M.open_dir = function(path)
             on_exit = function(_, code, _) --[[ print("exit with code:", code) return --]] end
         }
     )
-    -- Wait the job to exit before we continue
+    -- Wait the job to exit before we continue, timeout is 2 seconds
     -- return if exit_code is not 0
-    local exit_code = vim.fn.jobwait({job_id})
+    local exit_code = vim.fn.jobwait({job_id}, 2000)
     if exit_code[1] ~= 0 then return end
 
     core.buf_open({})
@@ -81,7 +77,6 @@ M.open_path = function()
     local data = M.info_table[line_nr - 1]
 
     if data.ftype == 'd' then
-        -- if data.fpath == '/' then print(vim.inspect(M.info_table)) end
         local last_path = M.info_table[2].fpath
         M.open_dir(data.fpath)
         if data.fname == ".." then
@@ -93,7 +88,11 @@ M.open_path = function()
         elseif data.misc.link_to == "broken" then
             vim.notify("Link is broken", vim.log.levels.WARN)
         else
+            local last_path = M.info_table[2].fpath
             M.open_dir(data.fpath)
+            if data.fname == ".." then
+                core.move_cursor_on_last_directory(last_path, M.info_table)
+            end
         end
     else
         vim.cmd('edit ' .. data.fpath)
@@ -101,6 +100,7 @@ M.open_path = function()
 end
 
 M.reload_wrap = function(path)
+-- print("before reload wrap")
     return vim.schedule_wrap(function()
         local prev_info_table = M.info_table
         M.open_dir(path)
@@ -117,7 +117,7 @@ M.reload_wrap = function(path)
         for j, _ in ipairs(M.info_table) do
             ops.set_mark(core.buf, M.info_table, j+1, M.info_table[j].mark)
         end
-        -- ops._copy_marks(M.info_table, prev_info_table)
+-- print("inside and after reload wrap")
     end)
 end
 
@@ -193,18 +193,27 @@ M.keys = function(key)
         end
 
         -- do delete on d mark files
-    elseif key == 'x' then
+    elseif key == 'X' then
+        local marks = {}
+        for i=4, #M.info_table do
+            if M.info_table[i].mark == 'd' then
+                table.insert(marks, M.info_table[i])
+            end
+        end
+        if #marks ~= 0 then
+            ops.remove(path, marks, reload_wrap)
+        else
+            vim.notify("No delete marks specified", vim.log.levels.WARN)
+            return
+        end
 
         -- reload
     elseif key == 'r' then
-        -- local prev_info_table = M.info_table
-        -- M.open_dir(path)
-        -- ops._copy_marks(M.info_table, prev_info_table)
-        -- print(vim.inspect(M.info_table))
         reload_wrap()
 
         -- shell command
     elseif key == "s!" then
+        ops.shell_command(path, reload_wrap)
     end
 
     -- These keys don't need to reload the buffer

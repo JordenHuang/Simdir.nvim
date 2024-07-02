@@ -17,7 +17,9 @@ M.default_keymaps = {
     ['u'] = ":lua require('simdir.dev').keys('u')<CR>",
     ['U'] = ":lua require('simdir.dev').keys('U')<CR>",
     ['i'] = ":lua require('simdir.dev').keys('i')<CR>",
+    ['X'] = ":lua require('simdir.dev').keys('X')<CR>",
     ['r'] = ":lua require('simdir.dev').keys('r')<CR>",
+    ["s!"] = ":lua require('simdir.dev').keys('s!')<CR>",
 }
 
 M.hl_ns_id = nil
