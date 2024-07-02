@@ -1,15 +1,18 @@
 --TODO:
 -- 1. cp command
 -- 2. custom keymaps
--- 3. o key should open file in another window
--- 4. understanding why and when to add fnameescape
+-- 3. understanding why and when to add fnameescape
 local M = {}
 
 local core = require('simdir.core')
+local kmap = require('simdir.keymap')
 local ops = require('simdir.operations')
 
 
-M.default_config = {}
+M.default_config = {
+    default_file_explorer = true,
+    -- keymaps = kmap.keymaps
+}
 
 M.commands = {
     "open_parent_dir",  -- Open current working directory
@@ -84,9 +87,10 @@ M.open_parent_dir = function()
     M.open_dir(vim.uv.cwd())
 end
 
-M.open_path = function()
-    local line_nr = vim.api.nvim_win_get_cursor(0)[1]
-    if line_nr == 1 or line_nr == 2 then return end
+
+local last_win
+
+M.open_path = function(line_nr, open_in_cur_win)
     local data = M.info_table[line_nr - 1]
 
     if data.ftype == 'd' then
@@ -97,7 +101,17 @@ M.open_path = function()
         end
     elseif data.ftype == 'l' then
         if data.misc.link_to_ftype == '-' then
-            vim.cmd('edit ' .. data.fpath)
+            if not open_in_cur_win then
+                if last_win and vim.api.nvim_win_is_valid(last_win) then
+                    vim.api.nvim_set_current_win(last_win)
+                else
+                    vim.cmd('belowright split')
+                end
+                vim.cmd('edit ' .. data.fpath)
+                last_win = vim.api.nvim_get_current_win()
+            else
+                vim.cmd('edit ' .. data.fpath)
+            end
         elseif data.misc.link_to_ftype == "broken" then
             vim.notify("Link is broken", vim.log.levels.WARN)
         else
@@ -108,7 +122,17 @@ M.open_path = function()
             end
         end
     else
-        vim.cmd('edit ' .. data.fpath)
+        if not open_in_cur_win then
+            if last_win and vim.api.nvim_win_is_valid(last_win) then
+                vim.api.nvim_set_current_win(last_win)
+            else
+                vim.cmd('belowright split')
+            end
+            vim.cmd('edit ' .. data.fpath)
+            last_win = vim.api.nvim_get_current_win()
+        else
+            vim.cmd('edit ' .. data.fpath)
+        end
     end
 end
 
@@ -146,23 +170,27 @@ M.keys = function(key)
 
     local reload_wrap = M.reload_wrap(path)
     -- open file or directory
-    if key == 'o' or key == "CR" then
-        M.open_path()
+    if key == "open" then
+        M.open_path(line_nr, true)
+
+        -- open file in split window
+    elseif key == "open_split" then
+        M.open_path(line_nr, false)
 
         -- touch command, for creating empty file
-    elseif key == 'T' then
+    elseif key == "touch" then
         ops.touch(path, reload_wrap)
 
         -- mkdir command
-    elseif key == '+' then
+    elseif key == "mkdir" then
         ops.mkdir(path, reload_wrap)
 
         -- rename
-    elseif key == 'R' then
+    elseif key == "rename" then
         ops.rename(path, data.fname, reload_wrap)
 
         -- move
-    elseif key == 'M' then
+    elseif key == "move" then
         local marks = {}
         for i=4, #M.info_table do
             if M.info_table[i].mark == 'm' then
@@ -173,28 +201,28 @@ M.keys = function(key)
         ops.move(path, marks, reload_wrap)
 
         -- set mark
-    elseif key == 'm' then
+    elseif key == "mark" then
         ops.set_mark(core.buf, M.info_table, line_nr, 'm')
         ops.move_cursor_down(core.buf.bufnr, core.win_id)
 
         -- set d mark
-    elseif key == 'd' then
+    elseif key == "d_mark" then
         ops.set_mark(core.buf, M.info_table, line_nr, 'd')
         ops.move_cursor_down(core.buf.bufnr, core.win_id)
 
         -- unmark
-    elseif key == 'u' then
+    elseif key == "unmark" then
         ops.set_mark(core.buf, M.info_table, line_nr, '')
         ops.move_cursor_down(core.buf.bufnr, core.win_id)
 
         -- unmark all
-    elseif key == 'U' then
+    elseif key == "unmark_all" then
         for i=4, #M.info_table do
             ops.set_mark(core.buf, M.info_table, i+1, '')
         end
 
         -- invert marks
-    elseif key == 'i' then
+    elseif key == "invert_mark" then
         for i=4, #M.info_table do
             if M.info_table[i].mark ~= 'd' then
                 if M.info_table[i].mark == 'm' then
@@ -206,7 +234,7 @@ M.keys = function(key)
         end
 
         -- do delete on d mark files
-    elseif key == 'X' then
+    elseif key == "remove" then
         local marks = {}
         for i=4, #M.info_table do
             if M.info_table[i].mark == 'd' then
@@ -221,16 +249,16 @@ M.keys = function(key)
         end
 
         -- reload
-    elseif key == 'r' then
+    elseif key == "reload" then
         reload_wrap()
 
         -- shell command
-    elseif key == "s!" then
+    elseif key == "shell_command" then
         ops.shell_command(path, reload_wrap)
     end
 
     -- These keys don't need to reload the buffer
-    local no_need_reload_keys = {"CR", 'o', 'm', 'd', 'u', 'U', 'i', 'r'}
+    local no_need_reload_keys = {"open", 'open_split', 'mark', 'd_mark', 'unmark', 'unmark_all', 'invert_mark', 'reload'}
     for _, v in ipairs(no_need_reload_keys) do
         if key == v then return end
     end
@@ -273,17 +301,45 @@ M.determine = function(opts)
 end
 
 M.setup = function(user_opts)
-    if user_opts then
-        M.config = vim.tbl_deep_extend("force", M.default_config, user_opts)
-    else
-        M.config = M.default_config
-    end
+    local config
+    config = vim.tbl_deep_extend("force", M.default_config, user_opts or {})
+
+    kmap.keymaps = config.keymaps
 
     core.init_hl_group()
 
     -- Create an autocommand group
-    vim.api.nvim_create_augroup('SimdirCursorHijack', { clear = true })
+    vim.api.nvim_create_augroup('Simdir_augroup', { clear = true })
 
+    if config.default_file_explorer then
+        vim.g.loaded_netrwPlugin = 1
+        vim.g.loaded_netrw = 1
+
+        if vim.fn.exists("#FileExplorer") then
+            vim.api.nvim_create_augroup("FileExplorer", { clear = true })
+        end
+
+        -- Autocommand to open directories with Simdir
+        vim.api.nvim_create_autocmd('VimEnter', {
+            callback = function()
+                local arg = vim.fn.argv(0)
+                if arg ~= '' and vim.fn.isdirectory(arg) == 1 then
+                    M.open_dir(vim.fn.fnamemodify(arg, ":p"))
+                end
+            end,
+        })
+
+        -- Autocommand to open directories with Simdir
+        vim.api.nvim_create_autocmd('BufEnter', {
+            callback = function()
+                local path = vim.fn.expand('%:p')
+                local stat = vim.loop.fs_stat(path)
+                if stat and stat.type == 'directory' then
+                    M.open_dir(path)
+                end
+            end,
+        })
+    end
 
     vim.api.nvim_create_user_command(
         'Simdir',

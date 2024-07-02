@@ -1,25 +1,9 @@
 local M = {}
 
 local Buffer = require('simdir.buffer')
+local kmap = require('simdir.keymap')
 
 M.buf = Buffer:new()
-
-M.default_keymaps = {
-    ["<CR>"] = ":lua require('simdir').keys('CR')<CR>",
-    ['o'] = ":echo 'you pressed o'<CR>",
-    ['+'] = ":lua require('simdir').keys('+')<CR>",
-    ['T'] = ":lua require('simdir').keys('T')<CR>",
-    ['R'] = ":lua require('simdir').keys('R')<CR>",
-    ['M'] = ":lua require('simdir').keys('M')<CR>",
-    ['m'] = ":lua require('simdir').keys('m')<CR>",
-    ['d'] = ":lua require('simdir').keys('d')<CR>",
-    ['u'] = ":lua require('simdir').keys('u')<CR>",
-    ['U'] = ":lua require('simdir').keys('U')<CR>",
-    ['i'] = ":lua require('simdir').keys('i')<CR>",
-    ['X'] = ":lua require('simdir').keys('X')<CR>",
-    ['r'] = ":lua require('simdir').keys('r')<CR>",
-    ["s!"] = ":lua require('simdir').keys('s!')<CR>",
-}
 
 M.hl_ns_id = nil
 
@@ -39,13 +23,10 @@ M.buf_open = function(keymaps)
         buftype = "nofile",
         modifiable = false,
         swapfile = false,
-        buflisted = true
+        buflisted = true,
     })
 
-    if #keymaps == 0 then keymaps = M.default_keymaps end
-    for k, v in pairs(keymaps) do
-        M.buf:set_keymap('n', k, v, '')
-    end
+    kmap.setup_buf_keymaps(M.buf)
 
     M.buf:open_in_window()
     M.win_id = vim.api.nvim_get_current_win()
@@ -87,7 +68,7 @@ M.cursor_hijack = function()
 
     -- Set up autocommands to call the function on cursor movement in normal mode
     vim.api.nvim_create_autocmd('CursorMoved', {
-        group = 'SimdirCursorHijack',
+        group = 'Simdir_augroup',
         buffer = M.buf.bufnr,
         callback = set_cursor_fixed_column,
     })
