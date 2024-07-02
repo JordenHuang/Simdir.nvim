@@ -1,207 +1,145 @@
 local M = {}
 
-local bf = require('simdir.buffer')
-local fs = require('simdir.fs')
-local hl = require('simdir.highlight')
+local Buffer = require('simdir.buffer')
 
-M.job_id = nil
-M.pid = nil
+local ops_buf
+
+-- @pmt : string, pmt is short for prompt
+M.create_prompt_window = function()
+    local buf = Buffer:new()
+    buf:create()
+    vim.api.nvim_buf_set_name(buf.bufnr, "Simdir-command")
+    buf:set_keymap('n', 'q', ":bdelete!<CR>", '')
+
+    -- Set buftype to prompt
+    buf:set_options({ buftype = "prompt" })
+    vim.cmd('belowright split')
+    buf:open_in_window()
+    vim.api.nvim_win_set_height(0, 3)
+    vim.api.nvim_win_set_option(0, "scrolloff", 0)
+    ops_buf = buf
+end
+
+M.get_prompt = function(pmt, path, msg, reload_callback)
+    -- Write mes
+    vim.fn.appendbufline(ops_buf.bufnr, 0, msg.op_name)
+    vim.fn.prompt_setprompt(ops_buf.bufnr, pmt)
+    vim.cmd('startinsert')
+
+    vim.api.nvim_feedkeys(msg.feed, 'i', false)
+
+    vim.fn.prompt_setcallback(ops_buf.bufnr, function(cmd)
+        -- Modify cmd only if pmt is in commands list
+        local commands = {"touch", "mkdir", "mv", "rm"}
+        for _, v in ipairs(commands) do
+            if pmt == v then
+                cmd = vim.fn.fnameescape(cmd)
+                break
+            end
+        end
+
+        vim.cmd('bdelete!')
+        cmd = pmt .. cmd
+        M._run_shell_command(path, cmd, msg.msg)
+        vim.schedule(function()
+            vim.cmd('stopinsert')
+            reload_callback()
+-- print("after callback")
+        end)
+-- print("after sche")
+    end)
+
+    vim.fn.prompt_setinterrupt(ops_buf.bufnr, function()
+        vim.cmd('bdelete!')
+        vim.cmd('stopinsert')
+    end)
+end
+
+
+M.touch = function(path, reload_callback)
+    local pmt = "touch "
+    local msg = { op_name="Touch", feed='', msg="File touched" }
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
+
+    -- vim.fn.prompt_setcallback(buf.bufnr, function(cmd)
+    --     vim.cmd('bdelete!')
+    --     vim.cmd('stopinsert')
+    --     cmd = pmt .. cmd
+    --     M._run_shell_command(path, cmd, "File touched")
+    --     callback()
+    -- end)
+end
+
+M.mkdir = function(path, reload_callback)
+    local pmt = "mkdir "
+    local msg = { op_name="Create directory", feed=path..'/', msg="Directory created" }
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
+end
+
+M.rename = function(path, fname, reload_callback)
+    local pmt = string.format("mv %s ", vim.fn.fnameescape(fname))
+    local msg = { op_name="Rename", feed=vim.fn.fnameescape(fname), msg="File/Directory renamed"}
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
+end
+
+M.move = function(path, marks, reload_callback)
+    local pmt = 'mv '
+    for _, v in ipairs(marks) do
+        pmt = pmt .. vim.fn.fnameescape(v.fname) .. ' '
+    end
+    local msg = { op_name="Move", feed=path..'/', msg=string.format("%d Files/Directories moved", #marks) }
+    -- print(pmt)
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
+end
+
+-- Marks
+M.set_mark = function(buf, info_table, linenr, mark_type)
+    if linenr == 3 or linenr == 4 then return end
+    info_table[linenr - 1].mark = mark_type
+    buf:set_sign_col(linenr, mark_type)
+end
+
+M.remove = function(path, marks, reload_callback, to_trash)
+    local pmt = 'rm -r '
+    if to_trash then
+        pmt = 'mv '
+    end
+
+    for _, v in ipairs(marks) do
+        pmt = pmt .. vim.fn.fnameescape(v.fname) .. ' '
+    end
+    local msg = { op_name="Remove", feed='', msg=string.format("%d files/directories removed", #marks) }
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
+end
+
+M.shell_command = function(path, reload_callback)
+    local msg = { op_name="Shell command", feed='', msg="Command executed"}
+    M.create_prompt_window()
+    M.get_prompt('', path, msg, reload_callback)
+end
+
+
+-- Utility functions
+-- Move to next line
+M.move_cursor_down = function(bufnr, win_id)
+    local cursor_pos = vim.api.nvim_win_get_cursor(0)
+    if cursor_pos[1] ~= vim.api.nvim_buf_line_count(bufnr) then
+        vim.api.nvim_win_set_cursor(win_id, {cursor_pos[1] + 1, cursor_pos[2]})
+    end
+end
 
 local function print_and_sleep(msg)
     print(msg)
-    vim.fn.timer_start(3750, function() vim.cmd([[echon ' ']]) end)
-end
-
--- Function to split a string by spaces
-M.split_by_spaces = function(cmd)
-    local result = {}
-    for word in string.gmatch(cmd, "%S+") do
-        table.insert(result, word)
-    end
-    return result
-end
-
-
-M.touch = function(path)
-    path = fs.shorten_path(path)
-    local msg = "File created successfully"
-    if string.sub(path, -1) ~= '/' then path = path .. '/' end
-    vim.ui.input(
-        { prompt = "Touch file, Command:\ntouch ", default = path },
-        function(cmd)
-            if cmd == nil or cmd == '' then
-                return
-            end
-            -- print(cmd)
-            cmd = string.format("touch %s", cmd)
-            M._run_shell_command(path, cmd, msg)
-        end
-    )
-end
-
-M.mkdir = function(path)
-    if string.sub(path, -1) ~= '/' then path = path .. '/' end
-    print(fs.normalize_path(path))
-    vim.ui.input(
-        { prompt = "Create directory: ", default = path },
-        function(new_dir_path)
-            if new_dir_path == nil or new_dir_path == '' then
-                return
-            end
-            -- vim.uv.fs_mkdir(new_dir_path, 493, function(err)
-            --     if err then
-            --         vim.schedule(function()
-            --             vim.notify(err, vim.log.levels.ERROR)
-            --         end)
-            --     else
-            --         local msg = "Directory created"
-            --         vim.schedule(function() print_and_sleep(msg) end)
-            --     end
-            -- end)
-
-            -- The default permission is 0o755 (rwxr-xr-x: r/w for the user, readable for others)
-            -- convert to decimal is 493 (if using vim.uv.fs_mkdir)
-            -- Create parent directory allowing nested names
-            -- This allow nested creation
-            vim.fn.mkdir(fs.get_parent(new_dir_path), 'p')
-
-            -- Create dir
-            if vim.fn.mkdir(new_dir_path) == 1 then
-                local msg = "Directory created"
-                vim.schedule(function() print_and_sleep(msg) end)
-            else
-                vim.notify("Can't create directory", vim.log.levels.ERROR)
-            end
-        end
-    )
-end
-
--- @from : string, a path
-M.rename = function(from, old_fname)
-    local basename = fs.get_basename(from)
-    if fs.has_space(basename) then
-        from = fs.get_parent(from) .. '/'  .. string.sub(basename, 2, -2)
-        old_fname = string.sub(old_fname, 2, -2)
-    end
-    vim.ui.input(
-        { prompt = "Rename to: ", default = from },
-        function(to)
-            if to == nil or to == '' then
-                return
-            elseif to == from then
-                vim.cmd([[echon ' ']])
-                vim.notify("Rename to same name is invalid", vim.log.levels.ERROR)
-                return
-            end
-            -- Move while allowing to create directory
-            local success = pcall(function() vim.fn.mkdir(fs.get_parent(to), 'p') end)
-            if not success then
-                vim.notify("Can't create directory while renaming", vim.log.levels.ERROR)
-            end
-
-            success = vim.uv.fs_rename(from, to)
-            if success then
-                local msg = "Rename file/directory successfully"
-                vim.schedule(function() print_and_sleep(msg) end)
-            else
-                vim.notify("Can't rename file/directory", vim.log.levels.ERROR)
-            end
-            -- vim.uv.fs_rename(
-            --     from,
-            --     to,
-            --     function(err)
-            --         if err then
-            --             vim.schedule(function()
-            --                 vim.notify(err, vim.log.levels.ERROR)
-            --             end)
-            --         else
-            --             local msg = string.format("Rename/Move '%s' -> '%s' successfully", old_fname, fs.get_filename(to))
-            --             vim.schedule(function() print_and_sleep(msg) end)
-            --         end
-            --     end
-            -- )
-        end
-    )
-end
-
--- TODO: move allow all marked files to be move at once
-M.move = function(marks, path)
-    vim.ui.input(
-        { prompt = "Move to: ", default = path },
-        function(to)
-            if to == nil or to == '' then
-                return
-            end
-            -- Move while allowing to create directory
-            local success = pcall(function() vim.fn.mkdir(fs.get_parent(to), 'p') end)
-            if not success then
-                vim.notify("Can't create directory while renaming", vim.log.levels.ERROR)
-            end
-
-            for _, m in ipairs(marks) do
-                if m.ftype == 'l' then
-                    success = vim.uv.fs_rename(m.misc.fname_with_link_from, to)
-                else
-                    success = vim.uv.fs_rename(m.full_path, to)
-                end
-                print('from', m.full_path)
-                if success then
-                    local msg = "Move file/directory successfully"
-                    vim.schedule(function() print_and_sleep(msg) end)
-                else
-                    vim.notify("Can't move file/directory", vim.log.levels.ERROR)
-                end
-            end
-        end)
-end
-
-
--- table is pass by reference
-M.set_mark = function(info_table, line_nr, real_line_nr, mark_type)
-    -- Don't set mark on the '.' and ".." directory
-    if line_nr == 1 or line_nr == 2 then return end
-    info_table[line_nr].mark = mark_type
-
-    local bufnr = bf.buf.main
-    -- hl.place_sign(bufnr, line_nr, mark_type)
-    local sign_id = hl.place_sign(bufnr, info_table[line_nr].misc.sign_id, real_line_nr, mark_type)
-    info_table[line_nr].misc.sign_id = sign_id
-end
-
-M.unmark_all = function(info_table, real_line_nr)
-    for i = 3, #info_table do
-        M.set_mark(info_table, i, real_line_nr, '')
-    end
-end
-
--- Only invert m mark
-M.invert_mark = function(info_table, padding_line_count)
-    for i = 3, #info_table do
-        if info_table[i].mark ~= 'd' then
-            if info_table[i].mark == 'm' then
-                M.set_mark(info_table, i, i+padding_line_count, '')
-            else
-                M.set_mark(info_table, i, i+padding_line_count, 'm')
-            end
-        end
-    end
-end
-
-
-
-
-
-M.shell_command = function(prompt, command, path, msg)
-    vim.ui.input(
-        { prompt = "Shell command: " },
-        function(cmd)
-            if cmd == nil or cmd == ''  then
-                return
-            end
-            -- print(cmd)
-            M._run_shell_command(path, cmd, msg)
-        end
-    )
+    vim.schedule(function()
+        vim.fn.timer_start(3750, function() vim.cmd([[echon ' ']]) end)
+-- print("after timer")
+    end)
+-- print("after sche, in print and sleep")
 end
 
 M._run_shell_command = function(path, cmd, msg)
@@ -224,65 +162,20 @@ M._run_shell_command = function(path, cmd, msg)
             end
         }
     )
+    local exit_code = vim.fn.jobwait({M.job_id}, 2000)
+    if exit_code[1] == -1 then vim.notify("Timeout exceed", vim.log.levels.WARN) end
 end
 
 
+-- Unused function
 M.interrupt_program = function()
-    -- Ctrl+c to quit program
-    -- see como/buffer.lua
+    -- Quit program
     if M.job_id then
         if vim.fn.jobstop(M.job_id) == 0 then
             local msg = string.format("Job %d has been terminated", M.job_id)
             vim.notify(msg, vim.log.levels.INFO)
         end
     end
-    -- if M.pid then
-    --     -- print('M.pid:', M.pid)
-    --     vim.uv.kill(M.pid, 9)
-    -- end
 end
 
 return M
-
--- M._run_shell_command_with_spawn = function(path, cmd, msg)
---     local args = M.split_by_spaces(cmd)
---     cmd = args[1]
---     table.remove(args, 1)
---     print(vim.inspect(args))
---
---     -- Start the job (execute the user command)
---     local handle
---     local stderr = vim.uv.new_pipe(false)
---     handle, M.pid = vim.uv.spawn(
---         cmd,
---         {
---             args = args,
---             cwd = path,
---             stdio = { nil, nil, stderr }
---         },
---         function(exit_code, signal)
---             stderr:read_stop()
---             stderr:close()
---             handle:close()
---             vim.schedule(function()
---                 if exit_code == 0 then
---                     print(msg)
---                     vim.fn.timer_start(3750, function() vim.cmd([[echon ' ']]) end)
---                 end
---                 M.pid = nil
---             end)
---         end
---     )
---
---     stderr:read_start(function(err, data)
---         assert(not err, err)
---         vim.schedule(function()
---             if not data then return end
---             local s = vim.split(data, '\n', {plain=true, trimempty = true})
---             for _, line in ipairs(s) do
---                 vim.notify(line, vim.log.levels.ERROR)
---             end
---         end)
---     end)
--- end
-

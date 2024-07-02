@@ -1,25 +1,24 @@
 local M = {}
 
-local Buffer = require('simdir.dev-buffer')
+local Buffer = require('simdir.buffer')
 
 M.buf = Buffer:new()
 
 M.default_keymaps = {
-    ["<CR>"] = ":lua require('simdir.dev').keys('CR')<CR>",
+    ["<CR>"] = ":lua require('simdir').keys('CR')<CR>",
     ['o'] = ":echo 'you pressed o'<CR>",
-    ['q'] = ":q<CR>",
-    ['+'] = ":lua require('simdir.dev').keys('+')<CR>",
-    ['T'] = ":lua require('simdir.dev').keys('T')<CR>",
-    ['R'] = ":lua require('simdir.dev').keys('R')<CR>",
-    ['M'] = ":lua require('simdir.dev').keys('M')<CR>",
-    ['m'] = ":lua require('simdir.dev').keys('m')<CR>",
-    ['d'] = ":lua require('simdir.dev').keys('d')<CR>",
-    ['u'] = ":lua require('simdir.dev').keys('u')<CR>",
-    ['U'] = ":lua require('simdir.dev').keys('U')<CR>",
-    ['i'] = ":lua require('simdir.dev').keys('i')<CR>",
-    ['X'] = ":lua require('simdir.dev').keys('X')<CR>",
-    ['r'] = ":lua require('simdir.dev').keys('r')<CR>",
-    ["s!"] = ":lua require('simdir.dev').keys('s!')<CR>",
+    ['+'] = ":lua require('simdir').keys('+')<CR>",
+    ['T'] = ":lua require('simdir').keys('T')<CR>",
+    ['R'] = ":lua require('simdir').keys('R')<CR>",
+    ['M'] = ":lua require('simdir').keys('M')<CR>",
+    ['m'] = ":lua require('simdir').keys('m')<CR>",
+    ['d'] = ":lua require('simdir').keys('d')<CR>",
+    ['u'] = ":lua require('simdir').keys('u')<CR>",
+    ['U'] = ":lua require('simdir').keys('U')<CR>",
+    ['i'] = ":lua require('simdir').keys('i')<CR>",
+    ['X'] = ":lua require('simdir').keys('X')<CR>",
+    ['r'] = ":lua require('simdir').keys('r')<CR>",
+    ["s!"] = ":lua require('simdir').keys('s!')<CR>",
 }
 
 M.hl_ns_id = nil
@@ -35,7 +34,7 @@ M.buf_open = function(keymaps)
         M.buf:create()
         -- vim.cmd('split')
     end
-    vim.api.nvim_buf_set_name(M.buf.bufnr, "Simdir-dev")
+    vim.api.nvim_buf_set_name(M.buf.bufnr, "Simdir")
     M.buf:set_options({
         buftype = "nofile",
         modifiable = false,
