@@ -11,7 +11,7 @@ M.info_table = {}
 
 M.open_dir = function(path)
     local lines
-    local cmd = string.format("ls %s -alh", path)
+    local cmd = string.format([[ls %s -alh]], vim.fn.fnameescape(path))
     local job_id = vim.fn.jobstart(
         cmd,
         {
@@ -81,8 +81,12 @@ M.open_path = function()
     local data = M.info_table[line_nr - 1]
 
     if data.ftype == 'd' then
-        if data.fpath == '/' then print(vim.inspect(M.info_table)) end
+        -- if data.fpath == '/' then print(vim.inspect(M.info_table)) end
+        local last_path = M.info_table[2].fpath
         M.open_dir(data.fpath)
+        if data.fname == ".." then
+            core.move_cursor_on_last_directory(last_path, M.info_table)
+        end
     elseif data.ftype == 'l' then
         if data.misc.link_to == '-' then
             vim.cmd('edit ' .. data.fpath)

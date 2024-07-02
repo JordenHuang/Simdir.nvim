@@ -44,6 +44,7 @@ function Buffer:set_keymap(mode, lhs, rhs, desc)
 end
 
 -- Write lines
+-- @lines : table
 function Buffer:write_lines(s, e, lines)
     vim.api.nvim_buf_set_option(self.bufnr, 'modifiable', true)
     vim.api.nvim_buf_set_lines(self.bufnr, s, e, false, lines)

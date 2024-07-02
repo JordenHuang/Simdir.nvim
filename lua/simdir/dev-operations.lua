@@ -2,45 +2,58 @@ local M = {}
 
 local Buffer = require('simdir.dev-buffer')
 
+local ops_buf
+
 -- @pmt : string, pmt is short for prompt
 M.create_prompt_window = function()
     local buf = Buffer:new()
     buf:create()
     vim.api.nvim_buf_set_name(buf.bufnr, "Simdir-command")
     buf:set_keymap('n', 'q', ":q<CR>", '')
-    buf:set_keymap('n', 'q', ":lua require('simdir.dev-operations').interrupt_program()<CR>", '')
-    vim.cmd('belowright split')
-    buf:open_in_window()
-    vim.api.nvim_win_set_height(0, 5)
-    vim.api.nvim_win_set_option(0, "scrolloff", 0)
+    -- buf:set_keymap('n', '<CR>', ":q<CR>", '')
+    buf:set_keymap('n', '<C-c>', ":lua require('simdir.dev-operations').interrupt_program()<CR>", '')
 
     -- Set buftype to prompt
     buf:set_options({ buftype = "prompt" })
-    return buf
+    vim.cmd('belowright split')
+    buf:open_in_window()
+    vim.api.nvim_win_set_height(0, 3)
+    vim.api.nvim_win_set_option(0, "scrolloff", 0)
+    ops_buf = buf
 end
 
-M.get_prompt = function(buf, pmt, path, msg, callback)
+M.get_prompt = function(pmt, path, msg, reload_callback)
     -- Write mes
-    vim.fn.appendbufline(buf.bufnr, 0, path)
-    vim.fn.prompt_setprompt(buf.bufnr, pmt)
+    vim.fn.appendbufline(ops_buf.bufnr, 0, msg.op_name)
+    vim.fn.prompt_setprompt(ops_buf.bufnr, pmt)
     vim.cmd('startinsert')
-    vim.fn.prompt_setcallback(buf.bufnr, function(cmd)
+
+    vim.api.nvim_feedkeys(msg.feed, 'i', false)
+
+    vim.fn.prompt_setcallback(ops_buf.bufnr, function(cmd)
+        cmd = vim.fn.fnameescape(cmd)
         vim.cmd('bdelete!')
-        vim.schedule(function()
-            vim.cmd('stopinsert')
             -- print(pmt .. cmd)
             cmd = pmt .. cmd
-            M._run_shell_command(path, cmd, msg)
-            callback()
+            M._run_shell_command(path, cmd, msg.msg)
+        vim.schedule(function()
+            vim.cmd('stopinsert')
+            reload_callback()
         end)
+    end)
+
+    vim.fn.prompt_setinterrupt(ops_buf.bufnr, function()
+        vim.cmd('bdelete!')
+        vim.cmd('stopinsert')
     end)
 end
 
 
-M.touch = function(path, callback)
+M.touch = function(path, reload_callback)
     local pmt = "touch "
-    local buf = M.create_prompt_window()
-    M.get_prompt(buf, pmt, path, "File touched", callback)
+    local msg = { op_name="Touch", feed='', msg="File touched" }
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
 
     -- vim.fn.prompt_setcallback(buf.bufnr, function(cmd)
     --     vim.cmd('bdelete!')
@@ -51,26 +64,29 @@ M.touch = function(path, callback)
     -- end)
 end
 
-M.mkdir = function(path, callback)
+M.mkdir = function(path, reload_callback)
     local pmt = "mkdir "
-    local buf = M.create_prompt_window()
-    M.get_prompt(buf, pmt, path, "Directory created", callback)
+    local msg = { op_name="Create directory", feed=path..'/', msg="Directory created" }
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
 end
 
-M.rename = function(path, fname, callback)
-    local pmt = string.format("mv %s ", fname)
-    local buf = M.create_prompt_window()
-    M.get_prompt(buf, pmt, path, "File/Directory renamed", callback)
+M.rename = function(path, fname, reload_callback)
+    local pmt = string.format("mv %s ", vim.fn.fnameescape(fname))
+    local msg = { op_name="Rename", feed=vim.fn.fnameescape(fname), msg="File/Directory renamed"}
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
 end
 
-M.move = function(path, marks, callback)
+M.move = function(path, marks, reload_callback)
     local pmt = 'mv '
     for _, v in ipairs(marks) do
-        pmt = pmt .. v.fname .. ' '
+        pmt = pmt .. vim.fn.fnameescape(v.fname) .. ' '
     end
+    local msg = { op_name="Move", feed=path..'/', msg=string.format("%d Files/Directories moved", #marks) }
     -- print(pmt)
-    local buf = M.create_prompt_window()
-    M.get_prompt(buf, pmt, path, string.format("%d Files/Directories moved", #marks), callback)
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
 end
 
 -- Marks
@@ -121,7 +137,6 @@ M._run_shell_command = function(path, cmd, msg)
             end
         }
     )
-    -- vim.fn.jobwait(M.job_id)
 end
 
 

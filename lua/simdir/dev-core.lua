@@ -50,12 +50,12 @@ M.buf_open = function(keymaps)
     M.win_id = vim.api.nvim_get_current_win()
 end
 
-M.move_cursor_on_last_directory = function(last_path, info_table, padding)
+M.move_cursor_on_last_directory = function(last_path, info_table)
     local fname = vim.fn.fnamemodify(last_path, ":t")
     if fname == '' then return end
-    for i, data in ipairs(info_table) do
+    for _, data in ipairs(info_table) do
         if data.fname == fname then
-            vim.api.nvim_win_set_cursor(0, {i+padding, data.filename_start-1})
+            vim.api.nvim_win_set_cursor(0, {data.line_number, M.fname_start_col-1})
             return
         end
     end
@@ -167,11 +167,9 @@ M.parse_lines = function(lines, path)
 
                 -- Check fname has space in it or not
                 local sps, _ = string.find(fname, ' ', 1, true)
-                if sps then
-                    fname = "'" .. fname .. "'"
-                    -- hl_start = (M.filename_start - 1) - 1
-                    -- hl_end = string.len(line) + 1
-                end
+                -- if sps then
+                --     fname = "'" .. fname .. "'"
+                -- end
 
                 -- Get file path
                 if fname == ".." then
