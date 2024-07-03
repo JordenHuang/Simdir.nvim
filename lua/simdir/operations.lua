@@ -26,7 +26,7 @@ end
 
 M.get_prompt = function(pmt, path, msg, reload_callback)
     -- Write mes
-    vim.fn.appendbufline(ops_buf.bufnr, 0, msg.op_name)
+    vim.fn.appendbufline(ops_buf.bufnr, 0, string.format("%s, directory: %s", msg.op_name, path))
     vim.fn.prompt_setprompt(ops_buf.bufnr, pmt)
     vim.cmd('startinsert')
 
