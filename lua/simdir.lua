@@ -1,7 +1,5 @@
 --TODO:
--- 1. cp command
--- 2. custom keymaps
--- 3. understanding why and when to add fnameescape
+-- 1. understanding why and when to add fnameescape
 local M = {}
 
 local core = require('simdir.core')
@@ -9,9 +7,12 @@ local kmap = require('simdir.keymap')
 local ops = require('simdir.operations')
 
 
-M.default_config = {
+M.config = {}
+
+local default_config = {
     default_file_explorer = true,
-    -- keymaps = kmap.keymaps
+    use_trash_can_when_remove = true,
+    keymaps = kmap.keymaps
 }
 
 M.commands = {
@@ -90,8 +91,8 @@ end
 
 local last_win
 
-M.open_path = function(line_nr, open_in_cur_win)
-    local data = M.info_table[line_nr - 1]
+M.open_path = function(data, open_in_cur_win)
+    -- local data = M.info_table[line_nr - 1]
 
     if data.ftype == 'd' then
         local last_path = M.info_table[2].fpath
@@ -171,11 +172,15 @@ M.keys = function(key)
     local reload_wrap = M.reload_wrap(path)
     -- open file or directory
     if key == "open" then
-        M.open_path(line_nr, true)
+        M.open_path(data, true)
 
         -- open file in split window
     elseif key == "open_split" then
-        M.open_path(line_nr, false)
+        M.open_path(data, false)
+
+        -- open parent dir, go up parent dir. Open the ".."
+    elseif key == "parent_dir" then
+        M.open_path(M.info_table[3], true)
 
         -- touch command, for creating empty file
     elseif key == "touch" then
@@ -199,6 +204,17 @@ M.keys = function(key)
         end
         if #marks == 0 then table.insert(marks, data) end
         ops.move(path, marks, reload_wrap)
+
+        -- copy
+    elseif key == "copy" then
+        local marks = {}
+        for i=4, #M.info_table do
+            if M.info_table[i].mark == 'm' then
+                table.insert(marks, M.info_table[i])
+            end
+        end
+        if #marks == 0 then table.insert(marks, data) end
+        ops.copy(path, marks, reload_wrap)
 
         -- set mark
     elseif key == "mark" then
@@ -242,7 +258,11 @@ M.keys = function(key)
             end
         end
         if #marks ~= 0 then
-            ops.remove(path, marks, reload_wrap)
+            if M.config.use_trash_can_when_remove then
+                ops.remove(path, marks, reload_wrap, true)
+            else
+                ops.remove(path, marks, reload_wrap, false)
+            end
         else
             vim.notify("No delete marks specified", vim.log.levels.WARN)
             return
@@ -267,51 +287,71 @@ end
 
 
 M.determine = function(opts)
+    local args = {}
+    for str in string.gmatch(opts.args, "%S+") do
+        table.insert(args, str)
+    end
+
     -- Open parent directory
-    if opts.args == M.commands[1] then
+    if args[1] == M.commands[1] then
         M.open_parent_dir()
 
     -- Open specified directory
-    elseif opts.args == M.commands[2] then
-        vim.ui.input(
-            { prompt = "Open directory: ", default = vim.uv.cwd(), completion = "dir"},
-            function(pto)  -- pto = path to open
-                if pto == nil then
-                    return
-                elseif pto == '' then
-                    M.open_parent_dir()
-                    return
+    elseif args[1] == M.commands[2] then
+        if #args == 2 then
+            args[2] = vim.fn.fnamemodify(vim.fs.dirname(args[2]), ":p")
+            local stat = vim.uv.fs_stat(args[2])
+            if not stat then
+                vim.cmd([[echon ' ']])
+                vim.notify("No such directory: " .. args[2], vim.log.levels.WARN)
+            else
+                if stat.type == "file" then
+                    args[2] = vim.fs.dirname(args[2])
                 end
-
-                local stat = vim.uv.fs_stat(pto)
-                if not stat then
-                    vim.cmd([[echon ' ']])
-                    vim.notify("No such directory: " .. pto, vim.log.levels.WARN)
-                else
-                    if stat.type == "file" then
-                        pto = vim.fs.dirname(pto)
-                    end
-                    M.open_dir(pto)
-                end
+                M.open_dir(args[2])
             end
-        )
+        else
+            vim.ui.input(
+                { prompt = "Open directory: ", default = vim.uv.cwd(), completion = "dir"},
+                function(pto)  -- pto = path to open
+                    if pto == nil then
+                        return
+                    elseif pto == '' then
+                        M.open_parent_dir()
+                        return
+                    end
+
+                    local stat = vim.uv.fs_stat(pto)
+                    if not stat then
+                        vim.cmd([[echon ' ']])
+                        vim.notify("No such directory: " .. pto, vim.log.levels.WARN)
+                    else
+                        if stat.type == "file" then
+                            pto = vim.fs.dirname(args[2])
+                        end
+                        M.open_dir(pto)
+                    end
+                end
+            )
+        end
+    -- Else unknow
     else
         vim.notify("[Simdir] Unknow command", vim.log.levels.ERROR)
     end
 end
 
 M.setup = function(user_opts)
-    local config
-    config = vim.tbl_deep_extend("force", M.default_config, user_opts or {})
+    if user_opts ~= {} then M.config = user_opts
+    else M.config = default_config end
 
-    kmap.keymaps = config.keymaps
+    kmap.keymaps = M.config.keymaps
 
     core.init_hl_group()
 
     -- Create an autocommand group
     vim.api.nvim_create_augroup('Simdir_augroup', { clear = true })
 
-    if config.default_file_explorer then
+    if M.config.default_file_explorer then
         vim.g.loaded_netrwPlugin = 1
         vim.g.loaded_netrw = 1
 
@@ -332,6 +372,7 @@ M.setup = function(user_opts)
         -- Autocommand to open directories with Simdir
         vim.api.nvim_create_autocmd('BufEnter', {
             callback = function()
+                if vim.api.nvim_buf_get_name(0) == "simdir" then return end
                 local path = vim.fn.expand('%:p')
                 local stat = vim.loop.fs_stat(path)
                 if stat and stat.type == 'directory' then

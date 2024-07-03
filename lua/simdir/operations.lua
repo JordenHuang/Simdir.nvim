@@ -4,6 +4,10 @@ local Buffer = require('simdir.buffer')
 
 local ops_buf
 
+local trash_can_dir_name = ".simdir.nvim-trash"
+
+local backup_suffix = "simdir.nvim-backup"
+
 -- @pmt : string, pmt is short for prompt
 M.create_prompt_window = function()
     local buf = Buffer:new()
@@ -30,7 +34,7 @@ M.get_prompt = function(pmt, path, msg, reload_callback)
 
     vim.fn.prompt_setcallback(ops_buf.bufnr, function(cmd)
         -- Modify cmd only if pmt is in commands list
-        local commands = {"touch", "mkdir", "mv", "rm"}
+        local commands = {"touch", "mkdir", "mv", "rm", "cp"}
         for _, v in ipairs(commands) do
             if pmt == v then
                 cmd = vim.fn.fnameescape(cmd)
@@ -86,11 +90,22 @@ M.rename = function(path, fname, reload_callback)
 end
 
 M.move = function(path, marks, reload_callback)
-    local pmt = 'mv '
+    local pmt = string.format('mv -b --suffix=%s ', backup_suffix)
     for _, v in ipairs(marks) do
         pmt = pmt .. vim.fn.fnameescape(v.fname) .. ' '
     end
     local msg = { op_name="Move", feed=path..'/', msg=string.format("%d Files/Directories moved", #marks) }
+    -- print(pmt)
+    M.create_prompt_window()
+    M.get_prompt(pmt, path, msg, reload_callback)
+end
+
+M.copy = function(path, marks, reload_callback)
+    local pmt = string.format('cp -rb --suffix=%s ', backup_suffix)
+    for _, v in ipairs(marks) do
+        pmt = pmt .. vim.fn.fnameescape(v.fname) .. ' '
+    end
+    local msg = { op_name="Copy", feed=path..'/', msg=string.format("%d Files/Directories copied", #marks) }
     -- print(pmt)
     M.create_prompt_window()
     M.get_prompt(pmt, path, msg, reload_callback)
@@ -103,15 +118,23 @@ M.set_mark = function(buf, info_table, linenr, mark_type)
     buf:set_sign_col(linenr, mark_type)
 end
 
-M.remove = function(path, marks, reload_callback, to_trash)
+M.remove = function(path, marks, reload_callback, use_trash_can)
     local pmt = 'rm -r '
-    if to_trash then
+    if use_trash_can then
         pmt = 'mv '
     end
 
     for _, v in ipairs(marks) do
         pmt = pmt .. vim.fn.fnameescape(v.fname) .. ' '
     end
+
+    if use_trash_can then
+        -- Make sure the trash can exists
+        local dirname = string.format('%s%s', vim.fn.fnamemodify('~', ":p"), trash_can_dir_name)
+        vim.fn.mkdir( dirname, 'p')
+        pmt = pmt .. dirname
+    end
+
     local msg = { op_name="Remove", feed='', msg=string.format("%d files/directories removed", #marks) }
     M.create_prompt_window()
     M.get_prompt(pmt, path, msg, reload_callback)
@@ -162,8 +185,8 @@ M._run_shell_command = function(path, cmd, msg)
             end
         }
     )
-    local exit_code = vim.fn.jobwait({M.job_id}, 2000)
-    if exit_code[1] == -1 then vim.notify("Timeout exceed", vim.log.levels.WARN) end
+    -- local exit_code = vim.fn.jobwait({M.job_id}, 2000)
+    -- if exit_code[1] == -1 then vim.notify("Timeout exceed", vim.log.levels.WARN) end
 end
 
 
