@@ -2,6 +2,8 @@
 
 **Sim**ple **dir**ectory editor is a neovim plugin that shows directory content using dired like format, and provides some basic functions to let you edit your file system.
 
+![demo image](./demo.png)
+
 ## Why
 
 Because I'm learning new things by doing :) 
@@ -56,7 +58,9 @@ local function opts(description)
 end
 
 -- Set up some keymaps
-vim.api.nvim_set_keymap("n", "<leader>se", ":Simdir open_parent_dir<CR>", opts("Simdir: open parent directory"))
+-- Open last buffer, if no last, ask user to create one or not
+vim.api.nvim_set_keymap("n", "<leader>se", ":Simdir open_last<CR>", opts("Simdir: open last buffer"))
+vim.api.nvim_set_keymap("n", "<leader>sp", ":Simdir open_parent_dir<CR>", opts("Simdir: open parent directory"))
 vim.api.nvim_set_keymap("n", "<leader>so", ":Simdir open_dir<CR>", opts("Simdir: open directory"))
 ```
 

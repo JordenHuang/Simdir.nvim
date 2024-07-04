@@ -18,6 +18,7 @@ local default_config = {
 M.commands = {
     "open_parent_dir",  -- Open current working directory
     "open_dir",  -- Open specified directory
+    "open_last", -- Open last simdir buffer
 }
 
 M.info_table = {}
@@ -86,6 +87,23 @@ end
 
 M.open_parent_dir = function()
     M.open_dir(vim.uv.cwd())
+end
+
+M.open_last = function()
+    local flag = true
+    if not core.buf:is_loaded() then flag = false end
+    local bufs = vim.api.nvim_list_bufs()
+    if flag then
+        for _, v in ipairs(bufs) do
+            if core.buf.bufnr == v then
+                vim.api.nvim_win_set_buf(0, v)
+                return
+            end
+        end
+    end
+    vim.notify("[Simdir] No last simdir buffer", vim.log.levels.WARN)
+    local choice = vim.fn.confirm("Open parent directory?", "&y\n&n\n")
+    if choice == 1 then M.open_parent_dir() end
 end
 
 
@@ -334,6 +352,9 @@ M.determine = function(opts)
                 end
             )
         end
+        -- Open last simdir buffer
+    elseif args[1] == M.commands[3] then
+        M.open_last()
     -- Else unknow
     else
         vim.notify("[Simdir] Unknow command", vim.log.levels.ERROR)

@@ -31,10 +31,7 @@ function Buffer:is_loaded()
     if self.bufnr == nil then return false end
     local valid = vim.api.nvim_buf_is_loaded(self.bufnr)
     if valid == true then return true
-    else
-        vim.api.nvim_buf_delete(self.bufnr, {})
-        return false
-    end
+    else return false end
 end
 
 -- Set buffer local keymaps
