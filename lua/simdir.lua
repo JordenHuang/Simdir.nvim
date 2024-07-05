@@ -110,8 +110,6 @@ end
 local last_win
 
 M.open_path = function(data, open_in_cur_win)
-    -- local data = M.info_table[line_nr - 1]
-
     if data.ftype == 'd' then
         local last_path = M.info_table[2].fpath
         M.open_dir(data.fpath)
@@ -332,6 +330,7 @@ M.determine = function(opts)
             vim.ui.input(
                 { prompt = "Open directory: ", default = vim.uv.cwd(), completion = "dir"},
                 function(pto)  -- pto = path to open
+                    pto = vim.fn.fnamemodify(pto, ":p")
                     if pto == nil then
                         return
                     elseif pto == '' then
@@ -345,7 +344,7 @@ M.determine = function(opts)
                         vim.notify("No such directory: " .. pto, vim.log.levels.WARN)
                     else
                         if stat.type == "file" then
-                            pto = vim.fs.dirname(args[2])
+                            pto = vim.fs.dirname(pto)
                         end
                         M.open_dir(pto)
                     end
