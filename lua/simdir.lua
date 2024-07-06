@@ -1,5 +1,6 @@
 --TODO:
--- 1. understanding why and when to add fnameescape
+-- 1. move keys to action.lua, sperate them in to different functions
+-- 2. understanding why and when to add fnameescape
 local M = {}
 
 local core = require('simdir.core')
@@ -50,7 +51,7 @@ M.open_dir = function(path)
     local exit_code = vim.fn.jobwait({job_id}, 2000)
     if exit_code[1] ~= 0 then return end
 
-    core.buf_open({})
+    core.buf_open()
     -- Clear the buffer content
     core.buf:write_lines(0, -1, {})
     -- Write path message
@@ -140,7 +141,7 @@ M.open_path = function(data, open_in_cur_win)
         end
     else
         if not open_in_cur_win then
-            if last_win and vim.api.nvim_win_is_valid(last_win) then
+            if last_win and vim.api.nvim_win_is_valid(last_win) and last_win ~= vim.api.nvim_get_current_win() then
                 vim.api.nvim_set_current_win(last_win)
             else
                 vim.cmd('belowright split')
@@ -176,7 +177,8 @@ M.reload_wrap = function(path)
 end
 
 M.keys = function(key)
-    if vim.api.nvim_get_current_win() ~= core.win_id then return end
+    if vim.api.nvim_get_current_buf() ~= core.buf.bufnr then return end
+    local win_id = vim.api.nvim_get_current_win()
 
     local path = M.info_table[2].fpath
 
@@ -235,17 +237,17 @@ M.keys = function(key)
         -- set mark
     elseif key == "mark" then
         ops.set_mark(core.buf, M.info_table, line_nr, 'm')
-        ops.move_cursor_down(core.buf.bufnr, core.win_id)
+        ops.move_cursor_down(core.buf.bufnr, win_id)
 
         -- set d mark
     elseif key == "d_mark" then
         ops.set_mark(core.buf, M.info_table, line_nr, 'd')
-        ops.move_cursor_down(core.buf.bufnr, core.win_id)
+        ops.move_cursor_down(core.buf.bufnr, win_id)
 
         -- unmark
     elseif key == "unmark" then
         ops.set_mark(core.buf, M.info_table, line_nr, '')
-        ops.move_cursor_down(core.buf.bufnr, core.win_id)
+        ops.move_cursor_down(core.buf.bufnr, win_id)
 
         -- unmark all
     elseif key == "unmark_all" then

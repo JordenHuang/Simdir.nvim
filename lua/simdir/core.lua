@@ -7,13 +7,11 @@ M.buf = Buffer:new()
 
 M.hl_ns_id = nil
 
-M.win_id = nil
-
 M.fname_start_col = nil
 
 -- Buffer part
 
-M.buf_open = function(keymaps)
+M.buf_open = function()
     if not M.buf:is_loaded() then
         M.buf:create()
         -- vim.cmd('split')
@@ -29,7 +27,7 @@ M.buf_open = function(keymaps)
     kmap.setup_buf_keymaps(M.buf)
 
     M.buf:open_in_window()
-    M.win_id = vim.api.nvim_get_current_win()
+    -- M.win_id = vim.api.nvim_get_current_win()
 end
 
 M.move_cursor_on_last_directory = function(last_path, info_table)

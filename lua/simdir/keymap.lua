@@ -23,7 +23,7 @@ M.setup_buf_keymaps = function(buf)
     local rhs
     for k, v in pairs(M.keymaps) do
         rhs = string.format(":lua require('simdir').keys('%s')<CR>", v)
-        buf:set_keymap('n', k, rhs, '')
+        buf:set_keymap('n', k, rhs, 'Simdir buffer')
     end
 end
 
